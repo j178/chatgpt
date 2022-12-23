@@ -18,8 +18,9 @@ type payload struct {
 }
 
 type response struct {
-	EOF  bool   `json:"eof"`
-	Text string `json:"text"`
+	EOF   bool   `json:"eof"`
+	Error string `json:"error"`
+	Text  string `json:"text"`
 }
 
 func doJson(client gpt3.Client, r io.Reader, w io.Writer) error {
@@ -45,7 +46,11 @@ func doJson(client gpt3.Client, r io.Reader, w io.Writer) error {
 			},
 		)
 		if err != nil {
-			return err
+			err = enc.Encode(response{Error: err.Error()})
+			if err != nil {
+				return err
+			}
+			continue
 		}
 		err = enc.Encode(response{EOF: true})
 		if err != nil {
@@ -90,7 +95,8 @@ func main() {
 				fmt.Print(resp.Choices[0].Text)
 			})
 		if err != nil {
-			log.Fatal(err)
+			fmt.Println(err)
+			continue
 		}
 		fmt.Println()
 	}
