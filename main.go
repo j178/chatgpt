@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 
-	"github.com/PullRequestInc/go-gpt3"
+	"github.com/charmbracelet/glamour"
+	gpt3 "github.com/sashabaranov/go-gpt3"
 )
+
+const maxTokens = 4096
 
 func main() {
 	apiKey := os.Getenv("OPENAI_API_KEY")
@@ -19,49 +21,50 @@ func main() {
 
 	client := gpt3.NewClient(apiKey)
 	scanner := bufio.NewScanner(os.Stdin)
-	messages := []gpt3.ChatCompletionRequestMessage{
+	messages := []gpt3.ChatCompletionMessage{
 		{
 			Role:    "system",
 			Content: "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
 		},
 	}
-	var respBuf strings.Builder
+	totalTokens := 0
+
 	for {
-		fmt.Print("> ")
+		fmt.Printf("(%d/%d)> ", totalTokens, maxTokens)
 		if !scanner.Scan() {
 			break
 		}
 		text := scanner.Text()
 		messages = append(
-			messages, gpt3.ChatCompletionRequestMessage{
+			messages, gpt3.ChatCompletionMessage{
 				Role:    "user",
 				Content: text,
 			},
 		)
-		err := client.ChatCompletionStream(
+		resp, err := client.CreateChatCompletion(
 			context.Background(),
 			gpt3.ChatCompletionRequest{
 				Model:       gpt3.GPT3Dot5Turbo,
 				Messages:    messages,
 				MaxTokens:   3000,
 				Temperature: 0,
-			}, func(resp *gpt3.ChatCompletionStreamResponse) {
-				content := resp.Choices[0].Delta.Content
-				respBuf.WriteString(content)
-				fmt.Print(content)
+				N:           1,
 			},
 		)
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
+		totalTokens = resp.Usage.TotalTokens
+		message := resp.Choices[0].Message.Content
+
+		rendered, _ := glamour.RenderWithEnvironmentConfig(message)
+		fmt.Println(rendered)
 		messages = append(
-			messages, gpt3.ChatCompletionRequestMessage{
+			messages, gpt3.ChatCompletionMessage{
 				Role:    "assistant",
-				Content: respBuf.String(),
+				Content: message,
 			},
 		)
-		respBuf.Reset()
-		fmt.Println()
 	}
 }
