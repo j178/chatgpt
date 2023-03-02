@@ -1,23 +1,21 @@
-# chatgpt
-
-CLI for ChatGPT
+# CLI for ChatGPT
 
 ## Usage
 
-```
-$ ./chatgpt
+```shell
+$ chatgpt
 ```
 
 ## Installation
 
-```
-go install github.com/mattn/chatgpt@latest
+```shell
+$ go install github.com/j178/chatgpt@latest
 ```
 
 ## License
 
 MIT
 
-## Author
+## Original Author
 
 Yasuhiro Matsumoto (a.k.a. mattn)
