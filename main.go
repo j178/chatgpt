@@ -16,7 +16,7 @@ const maxTokens = 4096
 func main() {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		log.Fatal("Missing OPENAI_API_KEY")
+		log.Fatal("Missing OPENAI_API_KEY, you can find or create your API key here: https://platform.openai.com/account/api-keys")
 	}
 
 	client := gpt3.NewClient(apiKey)
