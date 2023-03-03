@@ -7,7 +7,10 @@ A simple cli wrapper for ChatGPT API, powered by GPT-3.5-turbo model.
 
 ## Usage
 
+Get or create your OpenAI API Key from here: https://platform.openai.com/account/api-keys
+
 ```shell
+$ export OPENAI_API_KEY=xxx
 $ chatgpt
 ```
 
