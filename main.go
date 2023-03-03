@@ -7,9 +7,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	gpt3 "github.com/sashabaranov/go-gpt3"
 )
@@ -19,6 +21,7 @@ const maxTokens = 4096
 var (
 	senderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
 	botStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+	debug       = os.Getenv("DEBUG") == "1"
 )
 
 type (
@@ -33,7 +36,12 @@ func main() {
 	}
 
 	bot := newChatGPT(apiKey)
-	p := tea.NewProgram(initialModel(bot))
+	p := tea.NewProgram(initialModel(bot), tea.WithAltScreen())
+	if debug {
+		f, _ := tea.LogToFile("chatgpt.log", "")
+		defer f.Close()
+	}
+
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)
 	}
@@ -43,12 +51,17 @@ type chatGPT struct {
 	client      *gpt3.Client
 	messages    []gpt3.ChatCompletionMessage
 	totalTokens int
+	renderer    *glamour.TermRenderer
 }
 
 func newChatGPT(apiKey string) *chatGPT {
 	client := gpt3.NewClient(apiKey)
+	renderer, _ := glamour.NewTermRenderer(
+		glamour.WithEnvironmentConfig(),
+	)
 	return &chatGPT{
-		client: client,
+		client:   client,
+		renderer: renderer,
 		messages: []gpt3.ChatCompletionMessage{
 			{
 				Role:    "system",
@@ -58,7 +71,7 @@ func newChatGPT(apiKey string) *chatGPT {
 	}
 }
 
-func (c *chatGPT) Ask(text string) tea.Cmd {
+func (c *chatGPT) Ask() tea.Cmd {
 	return func() tea.Msg {
 		resp, err := c.client.CreateChatCompletion(
 			context.Background(),
@@ -94,16 +107,17 @@ func (c *chatGPT) Clear() {
 
 func (c *chatGPT) View() string {
 	var sb strings.Builder
-	for _, m := range c.messages {
+	for _, m := range c.messages[1:] {
 		switch m.Role {
 		case "user":
 			sb.WriteString(senderStyle.Render("You: "))
-			sb.WriteString(m.Content)
+			content, _ := c.renderer.Render(m.Content)
+			sb.WriteString(ensureTrailingNewline(content))
 		case "assistant":
 			sb.WriteString(botStyle.Render("ChatGPT: "))
-			sb.WriteString(m.Content)
+			content, _ := c.renderer.Render(m.Content)
+			sb.WriteString(ensureTrailingNewline(content))
 		}
-		sb.WriteByte('\n')
 	}
 	return sb.String()
 }
@@ -121,6 +135,10 @@ func initialModel(bot *chatGPT) model {
 	ta.Focus()
 
 	ta.Prompt = "┃ "
+	ta.CharLimit = -1
+	if debug {
+		ta.Cursor.SetMode(cursor.CursorStatic)
+	}
 
 	ta.SetWidth(30)
 	ta.SetHeight(1)
@@ -130,7 +148,8 @@ func initialModel(bot *chatGPT) model {
 	ta.ShowLineNumbers = false
 
 	vp := viewport.New(45, 5)
-	ta.KeyMap.InsertNewline.SetEnabled(true)
+	// use enter to send messages, shift+enter for new line
+	ta.KeyMap.InsertNewline.SetKeys("shift+enter")
 
 	return model{
 		textarea: ta,
@@ -141,7 +160,10 @@ func initialModel(bot *chatGPT) model {
 }
 
 func (m model) Init() tea.Cmd {
-	return textarea.Blink
+	return tea.Batch(
+		tea.EnterAltScreen,
+		// textarea.Blink
+	)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -150,35 +172,52 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		vpCmd  tea.Cmd
 		askCmd tea.Cmd
 	)
+	log.Printf("msg: %v", msg)
 
 	m.textarea, tiCmd = m.textarea.Update(msg)
 	m.viewport, vpCmd = m.viewport.Update(msg)
 
 	// TODO add help, clear
 	// TODO shift+enter for new line
-	// TODO render markdown
+	// TODO viewport auto width, height
+	// TODO show tokens used in status bar
+	// TODO add spinner
+	// 1. chatgpt 的回复为什么换行，且缩进
+	// 3. 第一个问题为什么不显示
+	// 4. 如何让输入框自动增加高度
+	// 5. 如何启用鼠标滚动
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.viewport.Width = msg.Width
+		m.viewport.Height = msg.Height - m.textarea.Height() - 2
+		m.textarea.SetWidth(msg.Width)
 	case tea.KeyMsg:
 		switch msg.Type {
-		case tea.KeyCtrlC, tea.KeyEsc:
-			fmt.Println(m.textarea.Value())
-			return m, tea.Quit
 		case tea.KeyEnter:
+			if msg.Alt {
+				break
+			}
 			input := m.textarea.Value()
-			if input == "" {
+			if strings.TrimSpace(input) == "" {
 				break
 			}
 			m.bot.AddMessage("user", input)
 			m.viewport.SetContent(m.bot.View())
 			m.viewport.GotoBottom()
 			m.textarea.Reset()
-			askCmd = m.bot.Ask(input)
+			m.textarea.Blur()
+			askCmd = m.bot.Ask()
 		case tea.KeyCtrlR:
 			m.bot.Clear()
+			m.viewport.SetContent(m.bot.View())
+		case tea.KeyCtrlC, tea.KeyEsc:
+			return m, tea.Quit
 		}
 	case answerMsg:
 		m.bot.AddMessage("assistant", string(msg))
 		m.viewport.SetContent(m.bot.View())
+		m.viewport.GotoBottom()
+		m.textarea.Focus()
 	case errMsg:
 		m.err = msg
 		return m, nil
@@ -188,9 +227,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	if m.err != nil {
+		// todo display error in status bar
+	}
 	return fmt.Sprintf(
-		"%s\n\n%s",
+		"%s\n\n%s\n",
 		m.viewport.View(),
 		m.textarea.View(),
-	) + "\n\n"
+	)
+}
+
+func ensureTrailingNewline(s string) string {
+	if !strings.HasSuffix(s, "\n") {
+		return s + "\n"
+	}
+	return s
 }
