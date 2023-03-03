@@ -7,9 +7,10 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/cursor"
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,6 +24,7 @@ const maxTokens = 4096
 var (
 	senderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
 	botStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true)
 	debug       = os.Getenv("DEBUG") == "1"
 )
 
@@ -53,9 +55,10 @@ func main() {
 }
 
 type chatGPT struct {
-	client        *gpt3.Client
-	messages      []gpt3.ChatCompletionMessage
-	totalTokens   int
+	client   *gpt3.Client
+	messages []gpt3.ChatCompletionMessage
+	// stream chat mode does not return token usage
+	// totalTokens   int
 	renderer      *glamour.TermRenderer
 	stream        *gpt3.ChatCompletionStream
 	pendingAnswer []byte
@@ -82,10 +85,8 @@ func newChatGPT(apiKey string) *chatGPT {
 func (c *chatGPT) Ask(input string) tea.Cmd {
 	c.AddMessage("user", input)
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
 		stream, err := c.client.CreateChatCompletionStream(
-			ctx,
+			context.Background(),
 			gpt3.ChatCompletionRequest{
 				Model:       gpt3.GPT3Dot5Turbo,
 				Messages:    c.messages,
@@ -103,7 +104,6 @@ func (c *chatGPT) Ask(input string) tea.Cmd {
 		if err != nil {
 			return errMsg(err)
 		}
-		c.totalTokens = resp.Usage.TotalTokens
 		content := resp.Choices[0].Delta.Content
 		return deltaAnswerMsg(content)
 	}
@@ -164,9 +164,30 @@ func (c *chatGPT) View() string {
 	return sb.String()
 }
 
+type keyMap struct {
+	Quit  key.Binding
+	Clear key.Binding
+}
+
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Clear, k.Quit}
+}
+
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Clear, k.Quit},
+	}
+}
+
+var keys = keyMap{
+	Quit:  key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
+	Clear: key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "clear the chat")),
+}
+
 type model struct {
 	viewport viewport.Model
 	textarea textarea.Model
+	help     help.Model
 	err      error
 	bot      *chatGPT
 }
@@ -196,6 +217,7 @@ func initialModel(bot *chatGPT) model {
 	return model{
 		textarea: ta,
 		viewport: vp,
+		help:     help.New(),
 		bot:      bot,
 	}
 }
@@ -222,14 +244,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
-	// TODO add help, clear
+	// TODO add help, clear, status bar
 	// TODO shift+enter for new line
 	// TODO viewport auto width, height
-	// TODO show tokens used in status bar
-	// 1. chatgpt 的回复为什么换行，且缩进
-	// 4. 如何让输入框自动增加高度
+	// TODO 如何让输入框自动增加高度
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		m.help.Width = msg.Width
 		m.viewport.Width = msg.Width
 		// todo 更精确的计算
 		m.viewport.Height = msg.Height - m.textarea.Height() - 2
@@ -252,10 +273,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 			m.textarea.Reset()
 			m.textarea.Blur()
+			m.textarea.Placeholder = ""
 		case tea.KeyCtrlR:
 			if m.bot.answering {
 				break
 			}
+			m.err = nil
 			m.bot.Clear()
 			m.viewport.SetContent(m.bot.View())
 		case tea.KeyCtrlC, tea.KeyEsc:
@@ -263,26 +286,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case deltaAnswerMsg:
 		cmds = append(cmds, m.bot.AddDeltaAnswer(string(msg)))
+		m.err = nil
 		m.viewport.SetContent(m.bot.View())
 		m.viewport.GotoBottom()
 	case answerDoneMsg:
+		m.err = nil
+		m.textarea.Placeholder = "Send a message..."
 		m.textarea.Focus()
+		cmds = append(cmds, textarea.Blink)
 	case errMsg:
 		m.err = msg
-		return m, nil
+		m.textarea.Placeholder = "Send a message..."
+		m.textarea.Focus()
+		cmds = append(cmds, textarea.Blink)
 	}
 
 	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
+	var bottomLine string
 	if m.err != nil {
-		// todo display error in status bar
+		bottomLine = errorStyle.Render(fmt.Sprintf("\nerror: %v", m.err))
+	}
+	if bottomLine == "" {
+		bottomLine = m.help.View(keys)
 	}
 	return fmt.Sprintf(
-		"%s\n\n%s\n",
+		"%s\n%s\n\n%s",
 		m.viewport.View(),
 		m.textarea.View(),
+		bottomLine,
 	)
 }
 
