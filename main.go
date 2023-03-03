@@ -21,6 +21,7 @@ func main() {
 
 	client := gpt3.NewClient(apiKey)
 	scanner := bufio.NewScanner(os.Stdin)
+	renderer, _ := glamour.NewTermRenderer(glamour.WithEnvironmentConfig())
 	messages := []gpt3.ChatCompletionMessage{
 		{
 			Role:    "system",
@@ -58,7 +59,7 @@ func main() {
 		totalTokens = resp.Usage.TotalTokens
 		message := resp.Choices[0].Message.Content
 
-		rendered, _ := glamour.RenderWithEnvironmentConfig(message)
+		rendered, _ := renderer.Render(message)
 		fmt.Println(rendered)
 		messages = append(
 			messages, gpt3.ChatCompletionMessage{
