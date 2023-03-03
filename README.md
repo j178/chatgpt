@@ -1,4 +1,6 @@
-# CLI for ChatGPT
+# Cli for ChatGPT
+
+A simple cli wrapper for ChatGPT API, powered by GPT-3.5-turbo model.
 
 ## Usage
 
