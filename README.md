@@ -16,8 +16,25 @@ $ chatgpt
 
 ## Installation
 
+You can download the latest binary from the [release page](https://github.com/j178/chatgpt/releases).
+
+### Install via go
+
 ```shell
-$ go install github.com/j178/chatgpt@latest
+go install github.com/j178/chatgpt@latest
+```
+
+### Install via [HomeBrew](https://brew.sh/) on macOS/Linux
+
+```shell
+brew install j178/tap/chatgpt
+```
+
+### Install via [Scoop](https://scoop.sh/) on Windows
+
+```shell
+scoop bucket add j178 https://github.com/j178/scoop-bucket.git
+scoop install j178/chatgpt
 ```
 
 ## License

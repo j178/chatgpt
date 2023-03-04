@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - run: git fetch --force --tags
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '1.20.x'
+          cache: true
+      - uses: goreleaser/goreleaser-action@v4
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --rm-dist
+        env:
+          # Custom secret here since we need to access to j178/homebrew-tap and j178/scoop-bucket repo.
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
