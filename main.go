@@ -39,8 +39,8 @@ func main() {
 	if apiKey == "" {
 		log.Fatal("Missing OPENAI_API_KEY, you can find or create your API key here: https://platform.openai.com/account/api-keys")
 	}
-
-	bot := newChatGPT(apiKey)
+	baseURI := os.Getenv("OPENAI_API_ENDPOINT")
+	bot := newChatGPT(apiKey, baseURI)
 	p := tea.NewProgram(initialModel(bot), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if debug {
 		f, _ := tea.LogToFile("chatgpt.log", "")
@@ -65,8 +65,12 @@ type chatGPT struct {
 	answering     bool
 }
 
-func newChatGPT(apiKey string) *chatGPT {
-	client := gpt3.NewClient(apiKey)
+func newChatGPT(apiKey string, baseURI string) *chatGPT {
+	config := gpt3.DefaultConfig(apiKey)
+	if baseURI != "" {
+		config.BaseURL = baseURI
+	}
+	client := gpt3.NewClientWithConfig(config)
 	renderer, _ := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
 	)
