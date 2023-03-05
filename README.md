@@ -37,6 +37,16 @@ scoop bucket add j178 https://github.com/j178/scoop-bucket.git
 scoop install j178/chatgpt
 ```
 
+## Custom OpenAI API Endpoint
+
+If you cannot access to the default `api.openai.com` endpoint, you can use the custom endpoint.
+
+```shell
+export OPENAI_API_ENDPOINT=https://openai.workers.dev/v1
+```
+
+Here is an example of using CloudFlare Workers as a proxy: https://github.com/noobnooc/noobnooc/discussions/9
+
 ## License
 
 MIT
