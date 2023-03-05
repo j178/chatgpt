@@ -41,7 +41,12 @@ func main() {
 	}
 	baseURI := os.Getenv("OPENAI_API_ENDPOINT")
 	bot := newChatGPT(apiKey, baseURI)
-	p := tea.NewProgram(initialModel(bot), tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(
+		initialModel(bot), 
+		// enable mouse motion will make text not able to select
+		// tea.WithMouseCellMotion(),
+		// tea.WithAltScreen(),
+	)
 	if debug {
 		f, _ := tea.LogToFile("chatgpt.log", "")
 		defer f.Close()
@@ -215,8 +220,8 @@ func initialModel(bot *chatGPT) model {
 	ta.ShowLineNumbers = false
 
 	vp := viewport.New(45, 5)
-	// use enter to send messages, shift+enter for new line
-	ta.KeyMap.InsertNewline.SetKeys("shift+enter")
+	// use enter to send messages, alt+enter for new line
+	ta.KeyMap.InsertNewline.SetKeys("alt+enter")
 
 	return model{
 		textarea: ta,
@@ -227,13 +232,10 @@ func initialModel(bot *chatGPT) model {
 }
 
 func (m model) Init() tea.Cmd {
-	if debug {
-		return tea.EnterAltScreen
+	if !debug { // disable blink when debug
+		return textarea.Blink
 	}
-	return tea.Batch(
-		tea.EnterAltScreen,
-		textarea.Blink,
-	)
+	return nil
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
