@@ -37,7 +37,7 @@ type (
 func main() {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		log.Fatal("Missing OPENAI_API_KEY, you can find or create your API key here: https://platform.openai.com/account/api-keys")
+		log.Fatal("Missing OPENAI_API_KEY environment variable, you can find or create your API key here: https://platform.openai.com/account/api-keys")
 	}
 	baseURI := os.Getenv("OPENAI_API_ENDPOINT")
 	bot := newChatGPT(apiKey, baseURI)
