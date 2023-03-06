@@ -48,6 +48,9 @@ func main() {
 	flag.StringVar(&endpoint, "e", "https://api.openai.com/v1", "OpenAI API endpoint")
 	flag.IntVar(&maxConversations, "m", 10, "max conversation limit")
 	flag.Parse()
+	if maxConversations < 2 {
+		log.Fatal("conversation limit is too small")
+	}
 
 	bot := newChatGPT(apiKey, endpoint)
 	p := tea.NewProgram(
@@ -166,7 +169,9 @@ func (c *chatGPT) AddDeltaAnswer(delta string) tea.Cmd {
 }
 
 func (c *chatGPT) answerDone() {
-	c.stream.Close()
+	if c.stream != nil {
+		c.stream.Close()
+	}
 	c.stream = nil
 	c.answering = false
 	if len(c.pendingAnswer) > 0 {
