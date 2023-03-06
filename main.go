@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	gpt3 "github.com/sashabaranov/go-gpt3"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 const maxTokens = 4096
@@ -42,7 +43,7 @@ func main() {
 	baseURI := os.Getenv("OPENAI_API_ENDPOINT")
 	bot := newChatGPT(apiKey, baseURI)
 	p := tea.NewProgram(
-		initialModel(bot), 
+		initialModel(bot),
 		// enable mouse motion will make text not able to select
 		// tea.WithMouseCellMotion(),
 		// tea.WithAltScreen(),
@@ -127,7 +128,12 @@ func (c *chatGPT) AddMessage(role, text string) {
 	)
 }
 
-func (c *chatGPT) AddDeltaAnswer(delta string) tea.Cmd {
+func (c *chatGPT) AddDeltaAnswer(delta string, consoleWidth int) tea.Cmd {
+	ss := strings.Split(string(c.pendingAnswer), "\n")
+	if len(ss[len(ss)-1]) >= consoleWidth {
+		delta += "\n"
+	}
+
 	c.pendingAnswer = append(c.pendingAnswer, delta...)
 	return func() tea.Msg {
 		resp, err := c.stream.Recv()
@@ -250,6 +256,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
+	consoleWidth, _, _ := terminal.GetSize(int(os.Stdout.Fd()))
+
 	// TODO add help, clear, status bar
 	// TODO shift+enter for new line
 	// TODO viewport auto width, height
@@ -291,7 +299,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case deltaAnswerMsg:
-		cmds = append(cmds, m.bot.AddDeltaAnswer(string(msg)))
+		cmds = append(cmds, m.bot.AddDeltaAnswer(string(msg), consoleWidth))
 		m.err = nil
 		m.viewport.SetContent(m.bot.View())
 		m.viewport.GotoBottom()
