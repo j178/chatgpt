@@ -156,7 +156,7 @@ func (c *chatGPT) addMessage(role, text string) {
 	)
 }
 
-func (c *chatGPT) AddDeltaAnswer(delta string) tea.Cmd {
+func (c *chatGPT) addDeltaAnswer(delta string) tea.Cmd {
 	c.pendingAnswer = append(c.pendingAnswer, delta...)
 	return func() tea.Msg {
 		resp, err := c.stream.Recv()
@@ -329,7 +329,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case deltaAnswerMsg:
-		cmds = append(cmds, m.bot.AddDeltaAnswer(string(msg)))
+		cmds = append(cmds, m.bot.addDeltaAnswer(string(msg)))
 		m.err = nil
 		m.viewport.SetContent(m.bot.View(m.viewport.Width))
 		m.viewport.GotoBottom()
