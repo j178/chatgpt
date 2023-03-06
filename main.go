@@ -73,7 +73,6 @@ type chatGPT struct {
 	messages []gpt3.ChatCompletionMessage
 	// stream chat mode does not return token usage
 	// totalTokens   int
-	renderer      *glamour.TermRenderer
 	stream        *gpt3.ChatCompletionStream
 	pendingAnswer []byte
 	answering     bool
@@ -85,12 +84,8 @@ func newChatGPT(apiKey string, baseURI string) *chatGPT {
 		config.BaseURL = baseURI
 	}
 	client := gpt3.NewClientWithConfig(config)
-	renderer, _ := glamour.NewTermRenderer(
-		glamour.WithEnvironmentConfig(),
-	)
 	return &chatGPT{
-		client:   client,
-		renderer: renderer,
+		client: client,
 		messages: []gpt3.ChatCompletionMessage{
 			{
 				Role:    "system",
@@ -158,7 +153,7 @@ func (c *chatGPT) addMessage(role, text string) {
 	)
 }
 
-func (c *chatGPT) addDeltaAnswer(delta string) tea.Cmd {
+func (c *chatGPT) AddDeltaAnswer(delta string) tea.Cmd {
 	c.pendingAnswer = append(c.pendingAnswer, delta...)
 	return func() tea.Msg {
 		resp, err := c.stream.Recv()
@@ -184,23 +179,27 @@ func (c *chatGPT) clearAll() {
 	c.messages = c.messages[:1]
 }
 
-func (c *chatGPT) View() string {
+func (c *chatGPT) View(maxWidth int) string {
 	var sb strings.Builder
+	renderer, _ := glamour.NewTermRenderer(
+		glamour.WithEnvironmentConfig(),
+		glamour.WithWordWrap(maxWidth),
+	)
 	for _, m := range c.messages[1:] {
 		switch m.Role {
 		case "user":
 			sb.WriteString(senderStyle.Render("You: "))
-			content, _ := c.renderer.Render(m.Content)
+			content, _ := renderer.Render(m.Content)
 			sb.WriteString(ensureTrailingNewline(content))
 		case "assistant":
 			sb.WriteString(botStyle.Render("ChatGPT: "))
-			content, _ := c.renderer.Render(m.Content)
+			content, _ := renderer.Render(m.Content)
 			sb.WriteString(ensureTrailingNewline(content))
 		}
 	}
 	if len(c.pendingAnswer) > 0 {
 		sb.WriteString(botStyle.Render("ChatGPT: "))
-		content, _ := c.renderer.Render(string(c.pendingAnswer))
+		content, _ := renderer.Render(string(c.pendingAnswer))
 		sb.WriteString(content)
 	}
 	return sb.String()
@@ -294,6 +293,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// todo 更精确的计算
 		m.viewport.Height = msg.Height - m.textarea.Height() - 2
 		m.textarea.SetWidth(msg.Width)
+		m.viewport.SetContent(m.bot.View(m.viewport.Width))
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEnter:
@@ -308,7 +308,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 			cmds = append(cmds, m.bot.send(input))
-			m.viewport.SetContent(m.bot.View())
+			m.viewport.SetContent(m.bot.View(m.viewport.Width))
 			m.viewport.GotoBottom()
 			m.textarea.Reset()
 			m.textarea.Blur()
@@ -319,14 +319,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.err = nil
 			m.bot.clearAll()
-			m.viewport.SetContent(m.bot.View())
+			m.viewport.SetContent(m.bot.View(m.viewport.Width))
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
 		}
 	case deltaAnswerMsg:
-		cmds = append(cmds, m.bot.addDeltaAnswer(string(msg)))
+		cmds = append(cmds, m.bot.AddDeltaAnswer(string(msg)))
 		m.err = nil
-		m.viewport.SetContent(m.bot.View())
+		m.viewport.SetContent(m.bot.View(m.viewport.Width))
 		m.viewport.GotoBottom()
 	case errMsg:
 		// Network problem or answer completed, can't tell
