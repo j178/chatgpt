@@ -42,7 +42,7 @@ scoop install j178/chatgpt
 If you cannot access to the default `api.openai.com` endpoint, you can use the custom endpoint.
 
 ```shell
-export OPENAI_API_ENDPOINT=https://openai.workers.dev/v1
+chatgpt -e https://xxx.workers.dev/v1
 ```
 
 Here is an example of using CloudFlare Workers as a proxy: https://github.com/noobnooc/noobnooc/discussions/9
