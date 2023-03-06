@@ -9,7 +9,9 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/avast/retry-go"
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -103,26 +105,38 @@ func (c *chatGPT) send(input string) tea.Cmd {
 		c.addMessage("user", input)
 	}
 	return func() tea.Msg {
-		stream, err := c.client.CreateChatCompletionStream(
-			context.Background(),
-			gpt3.ChatCompletionRequest{
-				Model:       gpt3.GPT3Dot5Turbo,
-				Messages:    c.messages,
-				MaxTokens:   1000,
-				Temperature: 0,
-				N:           1,
+		var content string
+		err := retry.Do(
+			func() error {
+				stream, err := c.client.CreateChatCompletionStream(
+					context.Background(),
+					gpt3.ChatCompletionRequest{
+						Model:       gpt3.GPT3Dot5Turbo,
+						Messages:    c.messages,
+						MaxTokens:   1000,
+						Temperature: 0,
+						N:           1,
+					},
+				)
+				c.answering = true
+				c.stream = stream
+				if err != nil {
+					return errMsg(err)
+				}
+				resp, err := stream.Recv()
+				if err != nil {
+					return err
+				}
+				content = resp.Choices[0].Delta.Content
+				return nil
 			},
+			retry.Delay(500*time.Millisecond),
+			retry.Attempts(3),
+			retry.LastErrorOnly(true),
 		)
-		c.answering = true
-		c.stream = stream
 		if err != nil {
 			return errMsg(err)
 		}
-		resp, err := stream.Recv()
-		if err != nil {
-			return errMsg(err)
-		}
-		content := resp.Choices[0].Delta.Content
 		return deltaAnswerMsg(content)
 	}
 }
