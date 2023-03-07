@@ -20,6 +20,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/wrap"
 	gpt3 "github.com/sashabaranov/go-gpt3"
 )
 
@@ -79,6 +80,7 @@ type chatGPT struct {
 	stream        *gpt3.ChatCompletionStream
 	pendingAnswer []byte
 	answering     bool
+	renderer      *glamour.TermRenderer
 }
 
 func newChatGPT(apiKey string, baseURI string) *chatGPT {
@@ -87,6 +89,10 @@ func newChatGPT(apiKey string, baseURI string) *chatGPT {
 		config.BaseURL = baseURI
 	}
 	client := gpt3.NewClientWithConfig(config)
+	renderer, _ := glamour.NewTermRenderer(
+		glamour.WithEnvironmentConfig(),
+		glamour.WithWordWrap(0), // we do hard-wrapping ourselves
+	)
 	return &chatGPT{
 		client: client,
 		messages: []gpt3.ChatCompletionMessage{
@@ -95,6 +101,7 @@ func newChatGPT(apiKey string, baseURI string) *chatGPT {
 				Content: "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
 			},
 		},
+		renderer: renderer,
 	}
 }
 
@@ -140,20 +147,18 @@ func (c *chatGPT) send(input string) tea.Cmd {
 }
 
 func (c *chatGPT) addMessage(role, text string) {
-	n := len(c.messages)
-	if n > maxConversations {
-		// Remove the first message
-		for i := 1; i+1 < n; i++ {
-			c.messages[i] = c.messages[i+1]
-		}
-		c.messages = c.messages[:n-1]
+	m := gpt3.ChatCompletionMessage{
+		Role:    role,
+		Content: text,
 	}
-	c.messages = append(
-		c.messages, gpt3.ChatCompletionMessage{
-			Role:    role,
-			Content: text,
-		},
-	)
+	n := len(c.messages) - 1
+	if n >= maxConversations {
+		// Shift messages to the left
+		copy(c.messages[1:], c.messages[2:])
+		c.messages[n] = m
+	} else {
+		c.messages = append(c.messages, m)
+	}
 }
 
 func (c *chatGPT) addDeltaAnswer(delta string) tea.Cmd {
@@ -176,8 +181,8 @@ func (c *chatGPT) answerDone() {
 	c.answering = false
 	if len(c.pendingAnswer) > 0 {
 		c.addMessage("assistant", string(c.pendingAnswer))
+		c.pendingAnswer = c.pendingAnswer[:0]
 	}
-	c.pendingAnswer = c.pendingAnswer[:0]
 }
 
 func (c *chatGPT) clearAll() {
@@ -186,25 +191,24 @@ func (c *chatGPT) clearAll() {
 
 func (c *chatGPT) View(maxWidth int) string {
 	var sb strings.Builder
-	renderer, _ := glamour.NewTermRenderer(
-		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(maxWidth),
-	)
 	for _, m := range c.messages[1:] {
 		switch m.Role {
 		case "user":
 			sb.WriteString(senderStyle.Render("You: "))
-			content, _ := renderer.Render(m.Content)
+			content := wrap.String(m.Content, maxWidth-5)
+			content, _ = c.renderer.Render(content)
 			sb.WriteString(ensureTrailingNewline(content))
 		case "assistant":
 			sb.WriteString(botStyle.Render("ChatGPT: "))
-			content, _ := renderer.Render(m.Content)
+			content := wrap.String(m.Content, maxWidth-5)
+			content, _ = c.renderer.Render(content)
 			sb.WriteString(ensureTrailingNewline(content))
 		}
 	}
 	if len(c.pendingAnswer) > 0 {
 		sb.WriteString(botStyle.Render("ChatGPT: "))
-		content, _ := renderer.Render(string(c.pendingAnswer))
+		content := wrap.String(string(c.pendingAnswer), maxWidth-5)
+		content, _ = c.renderer.Render(content)
 		sb.WriteString(content)
 	}
 	return sb.String()
@@ -287,15 +291,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
-	// TODO add help, clear, status bar
 	// TODO shift+enter for new line
-	// TODO viewport auto width, height, wrap long text
-	// TODO 如何让输入框自动增加高度
+	// TODO auto height for textarea
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.help.Width = msg.Width
 		m.viewport.Width = msg.Width
-		// todo 更精确的计算
 		m.viewport.Height = msg.Height - m.textarea.Height() - 2
 		m.textarea.SetWidth(msg.Width)
 		m.viewport.SetContent(m.bot.View(m.viewport.Width))
@@ -358,11 +359,11 @@ func (m model) View() string {
 	if bottomLine == "" {
 		bottomLine = m.help.View(keys)
 	}
-	return fmt.Sprintf(
-		"%s\n%s\n\n%s",
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
 		m.viewport.View(),
 		m.textarea.View(),
-		bottomLine,
+		lipgloss.NewStyle().PaddingTop(1).Render(bottomLine),
 	)
 }
 
