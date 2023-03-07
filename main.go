@@ -215,23 +215,53 @@ func (c *chatGPT) View(maxWidth int) string {
 }
 
 type keyMap struct {
-	Quit  key.Binding
-	Clear key.Binding
+	Clear        key.Binding
+	NewLine      key.Binding
+	Quit         key.Binding
+	ViewPortKeys viewport.KeyMap
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Clear, k.Quit}
+	return []key.Binding{k.Clear, k.NewLine, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Clear, k.Quit},
+		{k.Clear, k.NewLine, k.Quit},
+		{k.ViewPortKeys.Up, k.ViewPortKeys.Down, k.ViewPortKeys.PageUp, k.ViewPortKeys.PageDown},
 	}
 }
 
 var keys = keyMap{
-	Quit:  key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
-	Clear: key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
+	Clear:   key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
+	NewLine: key.NewBinding(key.WithKeys("alt+enter", "ctrl+j"), key.WithHelp("ctrl+j", "insert new line")),
+	Quit:    key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
+	ViewPortKeys: viewport.KeyMap{
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown"),
+			key.WithHelp("pgdn", "page down"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup"),
+			key.WithHelp("pgup", "page up"),
+		),
+		HalfPageUp: key.NewBinding(
+			key.WithKeys("ctrl+u"),
+			key.WithHelp("ctrl+u", "½ page up"),
+		),
+		HalfPageDown: key.NewBinding(
+			key.WithKeys("ctrl+d"),
+			key.WithHelp("ctrl+d", "½ page down"),
+		),
+		Up: key.NewBinding(
+			key.WithKeys("up"),
+			key.WithHelp("↑", "up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down"),
+			key.WithHelp("↓", "down"),
+		),
+	},
 }
 
 type model struct {
@@ -252,7 +282,6 @@ func initialModel(bot *chatGPT) model {
 	if debug {
 		ta.Cursor.SetMode(cursor.CursorStatic)
 	}
-
 	ta.SetWidth(50)
 	ta.SetHeight(1)
 
@@ -261,8 +290,10 @@ func initialModel(bot *chatGPT) model {
 	ta.ShowLineNumbers = false
 
 	vp := viewport.New(50, 5)
+
 	// use enter to send messages, alt+enter for new line
-	ta.KeyMap.InsertNewline.SetKeys("alt+enter", "ctrl+j")
+	ta.KeyMap.InsertNewline = keys.NewLine
+	vp.KeyMap = keys.ViewPortKeys
 
 	return model{
 		textarea: ta,
@@ -291,8 +322,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
-	// TODO shift+enter for new line
-	// TODO auto height for textarea
+	// TODO auto height for textinput
+	// TODO paste multiple lines
+	// TODO copy without space padding
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.help.Width = msg.Width
