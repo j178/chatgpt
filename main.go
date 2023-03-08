@@ -320,6 +320,7 @@ func initialModel(bot *chatGPT) model {
 	keys := defaultKeyMap()
 	vp.KeyMap = keys.ViewPortKeys
 	ta.KeyMap.InsertNewline = keys.mode.NewLine
+	ta.KeyMap.TransposeCharacterBackward.SetEnabled(false)
 
 	return model{
 		textarea: ta,
