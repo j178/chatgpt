@@ -215,53 +215,77 @@ func (c *chatGPT) View(maxWidth int) string {
 }
 
 type keyMap struct {
+	mode
 	Clear        key.Binding
-	NewLine      key.Binding
 	Quit         key.Binding
 	ViewPortKeys viewport.KeyMap
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Clear, k.NewLine, k.Quit}
+	return []key.Binding{k.Submit, k.Clear, k.Switch, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Clear, k.NewLine, k.Quit},
+		{k.Submit, k.Clear, k.Switch, k.Quit},
 		{k.ViewPortKeys.Up, k.ViewPortKeys.Down, k.ViewPortKeys.PageUp, k.ViewPortKeys.PageDown},
 	}
 }
 
-var keys = keyMap{
-	Clear:   key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
-	NewLine: key.NewBinding(key.WithKeys("alt+enter", "ctrl+j"), key.WithHelp("ctrl+j", "insert new line")),
-	Quit:    key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
-	ViewPortKeys: viewport.KeyMap{
-		PageDown: key.NewBinding(
-			key.WithKeys("pgdown"),
-			key.WithHelp("pgdn", "page down"),
-		),
-		PageUp: key.NewBinding(
-			key.WithKeys("pgup"),
-			key.WithHelp("pgup", "page up"),
-		),
-		HalfPageUp: key.NewBinding(
-			key.WithKeys("ctrl+u"),
-			key.WithHelp("ctrl+u", "½ page up"),
-		),
-		HalfPageDown: key.NewBinding(
-			key.WithKeys("ctrl+d"),
-			key.WithHelp("ctrl+d", "½ page down"),
-		),
-		Up: key.NewBinding(
-			key.WithKeys("up"),
-			key.WithHelp("↑", "up"),
-		),
-		Down: key.NewBinding(
-			key.WithKeys("down"),
-			key.WithHelp("↓", "down"),
-		),
-	},
+type mode struct {
+	Name    string
+	Switch  key.Binding
+	Submit  key.Binding
+	NewLine key.Binding
+}
+
+var (
+	SingleLine = mode{
+		Name:    "SingleLine",
+		Switch:  key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "multiline mode")),
+		Submit:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit")),
+		NewLine: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "insert new line")),
+	}
+	MultiLine = mode{
+		Name:    "MultiLine",
+		Switch:  key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "single line mode")),
+		Submit:  key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "submit")),
+		NewLine: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "insert new line")),
+	}
+)
+
+func defaultKeyMap() keyMap {
+	return keyMap{
+		mode:  SingleLine,
+		Clear: key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
+		Quit:  key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
+		ViewPortKeys: viewport.KeyMap{
+			PageDown: key.NewBinding(
+				key.WithKeys("pgdown"),
+				key.WithHelp("pgdn", "page down"),
+			),
+			PageUp: key.NewBinding(
+				key.WithKeys("pgup"),
+				key.WithHelp("pgup", "page up"),
+			),
+			HalfPageUp: key.NewBinding(
+				key.WithKeys("ctrl+u"),
+				key.WithHelp("ctrl+u", "½ page up"),
+			),
+			HalfPageDown: key.NewBinding(
+				key.WithKeys("ctrl+d"),
+				key.WithHelp("ctrl+d", "½ page down"),
+			),
+			Up: key.NewBinding(
+				key.WithKeys("up"),
+				key.WithHelp("↑", "up"),
+			),
+			Down: key.NewBinding(
+				key.WithKeys("down"),
+				key.WithHelp("↓", "down"),
+			),
+		},
+	}
 }
 
 type model struct {
@@ -270,6 +294,7 @@ type model struct {
 	help     help.Model
 	err      error
 	bot      *chatGPT
+	keymap   keyMap
 }
 
 func initialModel(bot *chatGPT) model {
@@ -292,14 +317,17 @@ func initialModel(bot *chatGPT) model {
 	vp := viewport.New(50, 5)
 
 	// use enter to send messages, alt+enter for new line
-	ta.KeyMap.InsertNewline = keys.NewLine
+	keys := defaultKeyMap()
 	vp.KeyMap = keys.ViewPortKeys
+	ta.KeyMap.InsertNewline = keys.mode.NewLine
+	ta.KeyMap.TransposeCharacterBackward.SetEnabled(false)
 
 	return model{
 		textarea: ta,
 		viewport: vp,
 		help:     help.New(),
 		bot:      bot,
+		keymap:   keys,
 	}
 }
 
@@ -333,8 +361,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.SetWidth(msg.Width)
 		m.viewport.SetContent(m.bot.View(m.viewport.Width))
 	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyEnter:
+		switch {
+		case key.Matches(msg, m.keymap.Submit):
 			if msg.Alt {
 				break
 			}
@@ -351,14 +379,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.Reset()
 			m.textarea.Blur()
 			m.textarea.Placeholder = ""
-		case tea.KeyCtrlR:
+		case key.Matches(msg, m.keymap.Clear):
 			if m.bot.answering {
 				break
 			}
 			m.err = nil
 			m.bot.clearAll()
 			m.viewport.SetContent(m.bot.View(m.viewport.Width))
-		case tea.KeyCtrlC, tea.KeyEsc:
+		case key.Matches(msg, m.keymap.Switch):
+			if m.keymap.Name == "SingleLine" {
+				m.keymap.mode = MultiLine
+				m.textarea.KeyMap.InsertNewline = MultiLine.NewLine
+				m.textarea.ShowLineNumbers = true
+				m.textarea.SetHeight(2)
+				m.viewport.Height--
+				m.viewport.SetContent(m.bot.View(m.viewport.Width))
+			} else {
+				m.keymap.mode = SingleLine
+				m.textarea.KeyMap.InsertNewline = SingleLine.NewLine
+				m.textarea.ShowLineNumbers = false
+				m.textarea.SetHeight(1)
+				m.viewport.Height++
+				m.viewport.SetContent(m.bot.View(m.viewport.Width))
+			}
+		case key.Matches(msg, m.keymap.Quit):
 			return m, tea.Quit
 		}
 	case deltaAnswerMsg:
@@ -389,7 +433,7 @@ func (m model) View() string {
 		bottomLine = errorStyle.Render(fmt.Sprintf("error: %v", m.err))
 	}
 	if bottomLine == "" {
-		bottomLine = m.help.View(keys)
+		bottomLine = m.help.View(m.keymap)
 	}
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
