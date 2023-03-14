@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/avast/retry-go"
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/help"
@@ -218,16 +219,19 @@ type keyMap struct {
 	mode
 	Clear        key.Binding
 	Quit         key.Binding
+	Copy         key.Binding
+	HistoryPrev  key.Binding
+	HistoryNext  key.Binding
 	ViewPortKeys viewport.KeyMap
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Submit, k.Clear, k.Switch, k.Quit}
+	return []key.Binding{k.Submit, k.Clear, k.Switch, k.Quit, k.Copy}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Submit, k.Clear, k.Switch, k.Quit},
+		{k.Submit, k.Clear, k.Switch, k.Quit, k.Copy},
 		{k.ViewPortKeys.Up, k.ViewPortKeys.Down, k.ViewPortKeys.PageUp, k.ViewPortKeys.PageDown},
 	}
 }
@@ -256,9 +260,12 @@ var (
 
 func defaultKeyMap() keyMap {
 	return keyMap{
-		mode:  SingleLine,
-		Clear: key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
-		Quit:  key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
+		mode:        SingleLine,
+		Clear:       key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
+		Quit:        key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
+		Copy:        key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy to clipboard")),
+		HistoryPrev: key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "previous question")),
+		HistoryNext: key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("ctrl+n", "next question")),
 		ViewPortKeys: viewport.KeyMap{
 			PageDown: key.NewBinding(
 				key.WithKeys("pgdown"),
@@ -289,12 +296,13 @@ func defaultKeyMap() keyMap {
 }
 
 type model struct {
-	viewport viewport.Model
-	textarea textarea.Model
-	help     help.Model
-	err      error
-	bot      *chatGPT
-	keymap   keyMap
+	viewport   viewport.Model
+	textarea   textarea.Model
+	historyIdx int
+	help       help.Model
+	err        error
+	bot        *chatGPT
+	keymap     keyMap
 }
 
 func initialModel(bot *chatGPT) model {
@@ -379,6 +387,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.Reset()
 			m.textarea.Blur()
 			m.textarea.Placeholder = ""
+			m.historyIdx = len(m.bot.messages)
 		case key.Matches(msg, m.keymap.Clear):
 			if m.bot.answering {
 				break
@@ -386,6 +395,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			m.bot.clearAll()
 			m.viewport.SetContent(m.bot.View(m.viewport.Width))
+			m.historyIdx = 0
 		case key.Matches(msg, m.keymap.Switch):
 			if m.keymap.Name == "SingleLine" {
 				m.keymap.mode = MultiLine
@@ -401,6 +411,44 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textarea.SetHeight(1)
 				m.viewport.Height++
 				m.viewport.SetContent(m.bot.View(m.viewport.Width))
+			}
+		case key.Matches(msg, m.keymap.Copy):
+			if m.bot.answering || len(m.bot.messages) == 0 {
+				break
+			}
+			clipboard.WriteAll(m.bot.messages[len(m.bot.messages)-1].Content)
+		case key.Matches(msg, m.keymap.HistoryNext):
+			if m.bot.answering {
+				break
+			}
+			m.historyIdx++
+			if m.historyIdx >= len(m.bot.messages)-1 {
+				m.historyIdx = len(m.bot.messages) - 1
+				m.textarea.SetValue("")
+				break
+			}
+			for idx := m.historyIdx; idx <= len(m.bot.messages)-1; idx++ {
+				if m.bot.messages[idx].Role == "user" {
+					m.textarea.SetValue(m.bot.messages[idx].Content)
+					m.historyIdx = idx
+					break
+				}
+			}
+		case key.Matches(msg, m.keymap.HistoryPrev):
+			if m.bot.answering {
+				break
+			}
+			m.historyIdx--
+			if m.historyIdx <= 1 {
+				m.historyIdx = 1
+				break
+			}
+			for idx := m.historyIdx; idx >= 0; idx-- {
+				if m.bot.messages[idx].Role == "user" {
+					m.textarea.SetValue(m.bot.messages[idx].Content)
+					m.historyIdx = idx
+					break
+				}
 			}
 		case key.Matches(msg, m.keymap.Quit):
 			return m, tea.Quit
