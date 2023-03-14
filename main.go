@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/avast/retry-go"
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/help"
@@ -218,16 +219,17 @@ type keyMap struct {
 	mode
 	Clear        key.Binding
 	Quit         key.Binding
+	Copy         key.Binding
 	ViewPortKeys viewport.KeyMap
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Submit, k.Clear, k.Switch, k.Quit}
+	return []key.Binding{k.Submit, k.Clear, k.Switch, k.Quit, k.Copy}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Submit, k.Clear, k.Switch, k.Quit},
+		{k.Submit, k.Clear, k.Switch, k.Quit, k.Copy},
 		{k.ViewPortKeys.Up, k.ViewPortKeys.Down, k.ViewPortKeys.PageUp, k.ViewPortKeys.PageDown},
 	}
 }
@@ -259,6 +261,7 @@ func defaultKeyMap() keyMap {
 		mode:  SingleLine,
 		Clear: key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
 		Quit:  key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
+		Copy:  key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy to clipboard")),
 		ViewPortKeys: viewport.KeyMap{
 			PageDown: key.NewBinding(
 				key.WithKeys("pgdown"),
@@ -402,6 +405,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.Height++
 				m.viewport.SetContent(m.bot.View(m.viewport.Width))
 			}
+		case key.Matches(msg, m.keymap.Copy):
+			if m.bot.answering || len(m.bot.messages) == 0 {
+				break
+			}
+			clipboard.WriteAll(m.bot.messages[len(m.bot.messages)-1].Content)
 		case key.Matches(msg, m.keymap.Quit):
 			return m, tea.Quit
 		}
