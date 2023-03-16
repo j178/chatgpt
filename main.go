@@ -299,7 +299,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Submit, k.Clear, k.Switch, k.Quit, k.Copy},
+		{k.Quit, k.Submit, k.Clear, k.Switch, k.Copy},
 		{k.ViewPortKeys.Up, k.ViewPortKeys.Down, k.ViewPortKeys.PageUp, k.ViewPortKeys.PageDown},
 	}
 }
@@ -332,7 +332,7 @@ func defaultKeyMap() keyMap {
 		Help:    key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "show help")),
 		Clear:   key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
 		Quit:    key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
-		Copy:    key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy to clipboard")),
+		Copy:    key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy last answer")),
 		ViewPortKeys: viewport.KeyMap{
 			PageDown: key.NewBinding(
 				key.WithKeys("pgdown"),
@@ -370,6 +370,8 @@ type model struct {
 	chatgpt  *ChatGPT
 	history  *History
 	keymap   keyMap
+	width    int
+	height   int
 }
 
 func initialModel(chatgpt *ChatGPT, history *History) model {
@@ -429,16 +431,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// TODO copy without space padding
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 		m.help.Width = msg.Width
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - m.textarea.Height() - 2
+		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(m.bottomLine())
 		m.textarea.SetWidth(msg.Width)
 		m.viewport.SetContent(m.history.View(m.viewport.Width))
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keymap.Help):
 			m.help.ShowAll = !m.help.ShowAll
-			// TODO move all SetContent to View
+			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.bottomLine())
 			m.viewport.SetContent(m.history.View(m.viewport.Width))
 		case key.Matches(msg, m.keymap.Submit):
 			if m.chatgpt.answering {
@@ -450,8 +454,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.history.AddQuestion(input)
 			cmds = append(cmds, m.chatgpt.send(m.history.GetContext()))
-			m.viewport.GotoBottom()
 			m.viewport.SetContent(m.history.View(m.viewport.Width))
+			m.viewport.GotoBottom()
 			m.textarea.Reset()
 			m.textarea.Blur()
 			m.textarea.Placeholder = ""
@@ -509,7 +513,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m model) View() string {
+func (m model) bottomLine() string {
 	var bottomLine string
 	if m.err != nil {
 		bottomLine = errorStyle.Render(fmt.Sprintf("error: %v", m.err))
@@ -517,11 +521,15 @@ func (m model) View() string {
 	if bottomLine == "" {
 		bottomLine = m.help.View(m.keymap)
 	}
+	return lipgloss.NewStyle().PaddingTop(1).Render(bottomLine)
+}
+
+func (m model) View() string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.viewport.View(),
 		m.textarea.View(),
-		lipgloss.NewStyle().PaddingTop(1).Render(bottomLine),
+		m.bottomLine(),
 	)
 }
 
