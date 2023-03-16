@@ -356,8 +356,8 @@ func defaultKeyMap() keyMap {
 		Clear:       key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
 		Quit:        key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
 		Copy:        key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy last answer")),
-		HistoryPrev: key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "previous question")),
-		HistoryNext: key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("ctrl+n", "next question")),
+		HistoryPrev: key.NewBinding(key.WithKeys("ctrl+p", "ctrl+up"), key.WithHelp("ctrl+p", "previous question")),
+		HistoryNext: key.NewBinding(key.WithKeys("ctrl+n", "ctrl+down"), key.WithHelp("ctrl+n", "next question")),
 		ViewPortKeys: viewport.KeyMap{
 			PageDown: key.NewBinding(
 				key.WithKeys("pgdown"),
