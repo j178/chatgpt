@@ -132,7 +132,7 @@ func (h *History) Clear() {
 }
 
 func (h *History) GetContext() []openai.ChatCompletionMessage {
-	messages := make([]openai.ChatCompletionMessage, 0, len(h.Context)+2)
+	messages := make([]openai.ChatCompletionMessage, 0, 2*len(h.Context)+2)
 	messages = append(
 		messages, openai.ChatCompletionMessage{
 			Role:    string(System),
