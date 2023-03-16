@@ -408,7 +408,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.bot.answering || len(m.bot.messages) == 0 {
 				break
 			}
-			clipboard.WriteAll(m.bot.messages[len(m.bot.messages)-1].Content)
+			_ = clipboard.WriteAll(m.bot.messages[len(m.bot.messages)-1].Content)
 		case key.Matches(msg, m.keymap.Quit):
 			return m, tea.Quit
 		}
