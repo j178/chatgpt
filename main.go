@@ -178,6 +178,20 @@ func (h *History) LastAnswer() string {
 	return h.Context[len(h.Context)-1].Answer
 }
 
+func (h *History) Len() int {
+	return len(h.Forgotten) + len(h.Context)
+}
+
+func (h *History) GetQuestion(idx int) string {
+	if idx < 0 || idx >= h.Len() {
+		return ""
+	}
+	if idx < len(h.Forgotten) {
+		return h.Forgotten[idx].Question
+	}
+	return h.Context[idx-len(h.Forgotten)].Question
+}
+
 func (h *History) View(maxWidth int) string {
 	var sb strings.Builder
 	renderYou := func(content string) {
@@ -290,6 +304,8 @@ type keyMap struct {
 	Clear        key.Binding
 	Quit         key.Binding
 	Copy         key.Binding
+	HistoryPrev  key.Binding
+	HistoryNext  key.Binding
 	ViewPortKeys viewport.KeyMap
 }
 
@@ -300,7 +316,14 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Quit, k.Submit, k.Clear, k.Switch, k.Copy},
-		{k.ViewPortKeys.Up, k.ViewPortKeys.Down, k.ViewPortKeys.PageUp, k.ViewPortKeys.PageDown},
+		{
+			k.HistoryPrev,
+			k.HistoryNext,
+			k.ViewPortKeys.Up,
+			k.ViewPortKeys.Down,
+			k.ViewPortKeys.PageUp,
+			k.ViewPortKeys.PageDown,
+		},
 	}
 }
 
@@ -328,11 +351,13 @@ var (
 
 func defaultKeyMap() keyMap {
 	return keyMap{
-		keyMode: SingleLine,
-		Help:    key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "show help")),
-		Clear:   key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
-		Quit:    key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
-		Copy:    key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy last answer")),
+		keyMode:     SingleLine,
+		Help:        key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "show help")),
+		Clear:       key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
+		Quit:        key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
+		Copy:        key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy last answer")),
+		HistoryPrev: key.NewBinding(key.WithKeys("ctrl+p", "ctrl+up"), key.WithHelp("ctrl+p", "previous question")),
+		HistoryNext: key.NewBinding(key.WithKeys("ctrl+n", "ctrl+down"), key.WithHelp("ctrl+n", "next question")),
 		ViewPortKeys: viewport.KeyMap{
 			PageDown: key.NewBinding(
 				key.WithKeys("pgdown"),
@@ -363,15 +388,16 @@ func defaultKeyMap() keyMap {
 }
 
 type model struct {
-	viewport viewport.Model
-	textarea textarea.Model
-	help     help.Model
-	err      error
-	chatgpt  *ChatGPT
-	history  *History
-	keymap   keyMap
-	width    int
-	height   int
+	viewport   viewport.Model
+	textarea   textarea.Model
+	help       help.Model
+	err        error
+	chatgpt    *ChatGPT
+	history    *History
+	keymap     keyMap
+	width      int
+	height     int
+	historyIdx int
 }
 
 func initialModel(chatgpt *ChatGPT, history *History) model {
@@ -459,6 +485,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.Reset()
 			m.textarea.Blur()
 			m.textarea.Placeholder = ""
+			m.historyIdx = m.history.Len() + 1
 		case key.Matches(msg, m.keymap.Clear):
 			if m.chatgpt.answering {
 				break
@@ -466,6 +493,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			m.history.Clear()
 			m.viewport.SetContent(m.history.View(m.viewport.Width))
+			m.historyIdx = 0
 		case key.Matches(msg, m.keymap.Switch):
 			if m.keymap.Name == "SingleLine" {
 				m.keymap.keyMode = MultiLine
@@ -486,6 +514,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 			_ = clipboard.WriteAll(m.history.LastAnswer())
+		case key.Matches(msg, m.keymap.HistoryNext):
+			if m.chatgpt.answering {
+				break
+			}
+			idx := m.historyIdx + 1
+			if idx >= m.history.Len() {
+				m.historyIdx = m.history.Len() - 1
+				m.textarea.SetValue("")
+			} else {
+				m.textarea.SetValue(m.history.GetQuestion(idx))
+				m.historyIdx = idx
+			}
+		case key.Matches(msg, m.keymap.HistoryPrev):
+			if m.chatgpt.answering {
+				break
+			}
+			idx := m.historyIdx - 1
+			if idx < 0 {
+				idx = 0
+			}
+			q := m.history.GetQuestion(idx)
+			m.textarea.SetValue(q)
+			m.historyIdx = idx
 		case key.Matches(msg, m.keymap.Quit):
 			return m, tea.Quit
 		}
