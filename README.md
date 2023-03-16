@@ -39,13 +39,13 @@ scoop install j178/chatgpt
 
 ## Custom OpenAI API Endpoint
 
-If you cannot access to the default `api.openai.com` endpoint, you can use the custom endpoint.
+If you cannot access to the default `api.openai.com` endpoint, you can use a custom endpoint by setting `OPENAI_API_ENDPOINT` environment variable.
 
 ```shell
-chatgpt -e https://xxx.workers.dev/v1
+export OPENAI_API_ENDPOINT=https://xxx.workers.dev/v1
 ```
 
-Here is an example of using CloudFlare Workers as a proxy: https://github.com/noobnooc/noobnooc/discussions/9
+Here is an example of how to use CloudFlare Workers as a proxy: https://github.com/noobnooc/noobnooc/discussions/9
 
 ## License
 

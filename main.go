@@ -38,7 +38,6 @@ type (
 )
 
 var (
-	endpoint         string
 	maxConversations int
 )
 
@@ -47,7 +46,7 @@ func main() {
 	if apiKey == "" {
 		log.Fatal("Missing OPENAI_API_KEY environment variable, you can find or create your API key here: https://platform.openai.com/account/api-keys")
 	}
-	flag.StringVar(&endpoint, "e", "https://api.openai.com/v1", "OpenAI API endpoint")
+	endpoint := os.Getenv("OPENAI_API_ENDPOINT")
 	flag.IntVar(&maxConversations, "m", 10, "max conversation limit")
 	flag.Parse()
 	if maxConversations < 2 {
@@ -409,7 +408,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.bot.answering || len(m.bot.messages) == 0 {
 				break
 			}
-			clipboard.WriteAll(m.bot.messages[len(m.bot.messages)-1].Content)
+			_ = clipboard.WriteAll(m.bot.messages[len(m.bot.messages)-1].Content)
 		case key.Matches(msg, m.keymap.Quit):
 			return m, tea.Quit
 		}
