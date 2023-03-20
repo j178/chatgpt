@@ -10,8 +10,8 @@ A simple cli wrapper for ChatGPT API, powered by GPT-3.5-turbo model.
 Get or create your OpenAI API Key from here: https://platform.openai.com/account/api-keys
 
 ```shell
-$ export OPENAI_API_KEY=xxx
-$ chatgpt
+export OPENAI_API_KEY=xxx
+chatgpt
 ```
 
 ## Installation
@@ -37,14 +37,26 @@ scoop bucket add j178 https://github.com/j178/scoop-bucket.git
 scoop install j178/chatgpt
 ```
 
-## Custom OpenAI API Endpoint
+## Customization
 
-If you cannot access to the default `api.openai.com` endpoint, you can use a custom endpoint by setting `OPENAI_API_ENDPOINT` environment variable.
+You can customize the model and parameters by creating a configuration file in `~/.config/chatgpt.json`.
 
-```shell
-export OPENAI_API_ENDPOINT=https://xxx.workers.dev/v1
+Here is the default configuration:
+
+```json
+{
+  "api_key": "sk-xxxxxx",
+  "endpoint": "https://api.openai.com/v1",
+  "prompt": "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
+  "model": "gpt-3.5-turbo",
+  "context_length": 6,
+  "stream": true,
+  "temperature": 0,
+  "max_tokens": 1024
+}
 ```
 
+If you cannot access to the default `https://api.openai.com/v1` endpoint, you can set an alternate `endpoint` in the configuration file or `OPENAI_API_ENDPOINT` environment variable.
 Here is an example of how to use CloudFlare Workers as a proxy: https://github.com/noobnooc/noobnooc/discussions/9
 
 ## License
