@@ -620,6 +620,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case answerMsg:
 		m.history.UpdatePending(string(msg), true)
 		m.chatgpt.done()
+		m.viewport.SetContent(m.history.View(m.viewport.Width))
+		m.viewport.GotoBottom()
 		m.textarea.Placeholder = "Send a message..."
 		m.textarea.Focus()
 	case errMsg:
