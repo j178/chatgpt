@@ -22,6 +22,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
 	"github.com/muesli/reflow/wrap"
 	"github.com/sashabaranov/go-openai"
@@ -59,6 +60,20 @@ func main() {
 	}
 
 	bot := newChatGPT(conf)
+	// One-time ask-and-response mode
+	if !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd()) {
+		question, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			log.Fatal(err)
+		}
+		answer, err := bot.ask(prompt, string(question))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Print(answer)
+		return
+	}
+
 	history := newHistory(conf.ContextLength, prompt)
 	p := tea.NewProgram(
 		initialModel(bot, history),
@@ -306,6 +321,27 @@ func newChatGPT(conf Config) *ChatGPT {
 		client: client,
 		conf:   conf,
 	}
+}
+
+func (c *ChatGPT) ask(prompt string, question string) (string, error) {
+	resp, err := c.client.CreateChatCompletion(
+		context.Background(),
+		openai.ChatCompletionRequest{
+			Model: c.conf.Model,
+			Messages: []openai.ChatCompletionMessage{
+				{Role: openai.ChatMessageRoleSystem, Content: prompt},
+				{Role: openai.ChatMessageRoleUser, Content: question},
+			},
+			MaxTokens:   c.conf.MaxTokens,
+			Temperature: c.conf.Temperature,
+			N:           1,
+		},
+	)
+	if err != nil {
+		return "", err
+	}
+	content := resp.Choices[0].Message.Content
+	return content, nil
 }
 
 func (c *ChatGPT) send(messages []openai.ChatCompletionMessage) tea.Cmd {
