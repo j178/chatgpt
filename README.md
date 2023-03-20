@@ -15,7 +15,8 @@ export OPENAI_API_KEY=xxx
 chatgpt
 
 # One-time chat mode, easily integrate with other tools
-echo "Hello, world" | chatgpt
+echo "Hello, world" | chatgpt -p translator
+cat config.yaml | chatgpt -p 'convert this yaml to json'
 ```
 
 ## Installation

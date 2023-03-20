@@ -36,7 +36,7 @@ var (
 
 var (
 	debug     = os.Getenv("DEBUG") == "1"
-	promptKey = flag.String("p", "default", "Which prompt to use")
+	promptKey = flag.String("p", "default", "Key of prompt defined in config file, or prompt itself")
 )
 
 type (
@@ -56,7 +56,7 @@ func main() {
 	}
 	prompt := conf.Prompts[*promptKey]
 	if prompt == "" {
-		log.Fatalf("prompt %s not found", *promptKey)
+		prompt = *promptKey
 	}
 
 	bot := newChatGPT(conf)
