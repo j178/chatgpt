@@ -325,7 +325,11 @@ func (c *ChatGPT) send(messages []openai.ChatCompletionMessage) tea.Cmd {
 					resp, err := c.client.CreateChatCompletion(
 						context.Background(),
 						openai.ChatCompletionRequest{
-							Model: c.conf.Model,
+							Model:       c.conf.Model,
+							Messages:    messages,
+							MaxTokens:   c.conf.MaxTokens,
+							Temperature: c.conf.Temperature,
+							N:           1,
 						},
 					)
 					if err != nil {
