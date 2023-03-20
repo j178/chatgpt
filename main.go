@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -33,7 +34,8 @@ var (
 )
 
 var (
-	debug = os.Getenv("DEBUG") == "1"
+	debug     = os.Getenv("DEBUG") == "1"
+	promptKey = flag.String("p", "default", "Which prompt to use")
 )
 
 type (
@@ -42,13 +44,22 @@ type (
 	answerMsg      string
 )
 
+// TODO support switch model in TUI
+// TODO support switch prompt in TUI
+
 func main() {
+	flag.Parse()
 	conf, err := getConfig()
 	if err != nil {
 		log.Fatal(err)
 	}
+	prompt := conf.Prompts[*promptKey]
+	if prompt == "" {
+		log.Fatalf("prompt %s not found", *promptKey)
+	}
+
 	bot := newChatGPT(conf)
-	history := newHistory(conf.ContextLength, conf.Prompt)
+	history := newHistory(conf.ContextLength, prompt)
 	p := tea.NewProgram(
 		initialModel(bot, history),
 		// enable mouse motion will make text not able to select
@@ -68,14 +79,14 @@ func main() {
 }
 
 type Config struct {
-	APIKey        string  `json:"api_key,omitempty"`
-	Endpoint      string  `json:"endpoint,omitempty"`
-	Prompt        string  `json:"prompt,omitempty"`
-	ContextLength int     `json:"context_length,omitempty"`
-	Model         string  `json:"model,omitempty"`
-	Stream        bool    `json:"stream,omitempty"`
-	Temperature   float32 `json:"temperature,omitempty"`
-	MaxTokens     int     `json:"max_tokens,omitempty"`
+	APIKey        string            `json:"api_key,omitempty"`
+	Endpoint      string            `json:"endpoint,omitempty"`
+	Prompts       map[string]string `json:"prompts,omitempty"`
+	ContextLength int               `json:"context_length,omitempty"`
+	Model         string            `json:"model,omitempty"`
+	Stream        bool              `json:"stream,omitempty"`
+	Temperature   float32           `json:"temperature,omitempty"`
+	MaxTokens     int               `json:"max_tokens,omitempty"`
 }
 
 func readConfig(conf *Config) error {
@@ -92,13 +103,15 @@ func readConfig(conf *Config) error {
 	if err != nil {
 		return err
 	}
-	return err
+	return nil
 }
 
 func getConfig() (Config, error) {
 	conf := Config{
-		Endpoint:      "https://api.openai.com/v1",
-		Prompt:        "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
+		Endpoint: "https://api.openai.com/v1",
+		Prompts: map[string]string{
+			"default": "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
+		},
 		Model:         openai.GPT3Dot5Turbo,
 		ContextLength: 6,
 		Stream:        true,
