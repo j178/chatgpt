@@ -10,7 +10,11 @@ Get or create your OpenAI API Key from here: https://platform.openai.com/account
 
 ```shell
 export OPENAI_API_KEY=xxx
+# Continuous chat mode
 chatgpt
+
+# One-time chat mode
+echo "Hello, world" | chatgpt
 ```
 
 ## Installation
