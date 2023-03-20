@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/atotto/clipboard"
@@ -20,6 +21,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mitchellh/go-homedir"
 	"github.com/muesli/reflow/wrap"
 	"github.com/sashabaranov/go-openai"
 )
@@ -31,29 +33,22 @@ var (
 )
 
 var (
-	debug            = os.Getenv("DEBUG") == "1"
-	endpoint         string
-	maxConversations uint
+	debug = os.Getenv("DEBUG") == "1"
 )
-
-const defaultPrompt = "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible."
 
 type (
 	errMsg         error
 	deltaAnswerMsg string
+	answerMsg      string
 )
 
 func main() {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		log.Fatal("Missing OPENAI_API_KEY environment variable, you can find or create your API key here: https://platform.openai.com/account/api-keys")
+	conf, err := getConfig()
+	if err != nil {
+		log.Fatal(err)
 	}
-	endpoint := os.Getenv("OPENAI_API_ENDPOINT")
-	flag.UintVar(&maxConversations, "m", 6, "max conversation limit")
-	flag.Parse()
-
-	bot := newChatGPT(apiKey, endpoint)
-	history := newHistory(int(maxConversations), defaultPrompt)
+	bot := newChatGPT(conf)
+	history := newHistory(conf.ContextLength, conf.Prompt)
 	p := tea.NewProgram(
 		initialModel(bot, history),
 		// enable mouse motion will make text not able to select
@@ -72,13 +67,67 @@ func main() {
 	}
 }
 
-type Role string
+type Config struct {
+	APIKey        string  `json:"api_key,omitempty"`
+	Endpoint      string  `json:"endpoint,omitempty"`
+	Prompt        string  `json:"prompt,omitempty"`
+	ContextLength int     `json:"context_length,omitempty"`
+	Model         string  `json:"model,omitempty"`
+	Stream        bool    `json:"stream,omitempty"`
+	Temperature   float32 `json:"temperature,omitempty"`
+	MaxTokens     int     `json:"max_tokens,omitempty"`
+}
 
-const (
-	System    Role = "system"
-	User      Role = "user"
-	Assistant Role = "assistant"
-)
+func readConfig(conf *Config) error {
+	home, err := homedir.Dir()
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(filepath.Join(home, ".config", "chatgpt.json"))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	err = json.NewDecoder(f).Decode(conf)
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+func getConfig() (Config, error) {
+	conf := Config{
+		Endpoint:      "https://api.openai.com/v1",
+		Prompt:        "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
+		Model:         openai.GPT3Dot5Turbo,
+		ContextLength: 6,
+		Stream:        true,
+		Temperature:   0,
+		MaxTokens:     1024,
+	}
+	err := readConfig(&conf)
+	if err != nil {
+		log.Println("Failed to read config file, using default config:", err)
+	}
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey != "" {
+		conf.APIKey = apiKey
+	}
+	endpoint := os.Getenv("OPENAI_API_ENDPOINT")
+	if endpoint != "" {
+		conf.Endpoint = endpoint
+	}
+	if conf.APIKey == "" {
+		return Config{}, errors.New("Missing OPENAI_API_KEY environment variable, you can find or create your API key here: https://platform.openai.com/account/api-keys")
+	}
+	// TODO: support non-chat models
+	switch conf.Model {
+	case openai.GPT3Dot5Turbo0301, openai.GPT3Dot5Turbo, openai.GPT4, openai.GPT40314, openai.GPT432K0314, openai.GPT432K:
+	default:
+		return Config{}, errors.New("Invalid model, please choose one of the following: gpt-3.5-turbo-0301, gpt-3.5-turbo, gpt-4, gpt-4-0314, gpt-4-32k-0314, gpt-4-32k")
+	}
+	return conf, nil
+}
 
 type Conversation struct {
 	Question string
@@ -135,20 +184,20 @@ func (h *History) GetContext() []openai.ChatCompletionMessage {
 	messages := make([]openai.ChatCompletionMessage, 0, 2*len(h.Context)+2)
 	messages = append(
 		messages, openai.ChatCompletionMessage{
-			Role:    string(System),
+			Role:    openai.ChatMessageRoleSystem,
 			Content: h.Prompt,
 		},
 	)
 	for _, c := range h.Context {
 		messages = append(
 			messages, openai.ChatCompletionMessage{
-				Role:    string(User),
+				Role:    openai.ChatMessageRoleUser,
 				Content: c.Question,
 			},
 		)
 		messages = append(
 			messages, openai.ChatCompletionMessage{
-				Role:    string(Assistant),
+				Role:    openai.ChatMessageRoleAssistant,
 				Content: c.Answer,
 			},
 		)
@@ -156,7 +205,7 @@ func (h *History) GetContext() []openai.ChatCompletionMessage {
 	if h.Pending != nil {
 		messages = append(
 			messages, openai.ChatCompletionMessage{
-				Role:    string(User),
+				Role:    openai.ChatMessageRoleUser,
 				Content: h.Pending.Question,
 			},
 		)
@@ -229,44 +278,62 @@ func (h *History) View(maxWidth int) string {
 
 type ChatGPT struct {
 	client    *openai.Client
+	conf      Config
 	stream    *openai.ChatCompletionStream
 	answering bool
 }
 
-func newChatGPT(apiKey string, baseURI string) *ChatGPT {
-	config := openai.DefaultConfig(apiKey)
-	if baseURI != "" {
-		config.BaseURL = baseURI
+func newChatGPT(conf Config) *ChatGPT {
+	config := openai.DefaultConfig(conf.APIKey)
+	if conf.Endpoint != "" {
+		config.BaseURL = conf.Endpoint
 	}
 	client := openai.NewClientWithConfig(config)
-	return &ChatGPT{client: client}
+	return &ChatGPT{
+		client: client,
+		conf:   conf,
+	}
 }
 
 func (c *ChatGPT) send(messages []openai.ChatCompletionMessage) tea.Cmd {
-	return func() tea.Msg {
-		var content string
+	return func() (msg tea.Msg) {
 		err := retry.Do(
 			func() error {
-				stream, err := c.client.CreateChatCompletionStream(
-					context.Background(),
-					openai.ChatCompletionRequest{
-						Model:       openai.GPT3Dot5Turbo,
-						Messages:    messages,
-						MaxTokens:   1000,
-						Temperature: 0,
-						N:           1,
-					},
-				)
-				c.answering = true
-				c.stream = stream
-				if err != nil {
-					return errMsg(err)
+				if c.conf.Stream {
+					stream, err := c.client.CreateChatCompletionStream(
+						context.Background(),
+						openai.ChatCompletionRequest{
+							Model:       c.conf.Model,
+							Messages:    messages,
+							MaxTokens:   c.conf.MaxTokens,
+							Temperature: c.conf.Temperature,
+							N:           1,
+						},
+					)
+					c.answering = true
+					c.stream = stream
+					if err != nil {
+						return errMsg(err)
+					}
+					resp, err := stream.Recv()
+					if err != nil {
+						return err
+					}
+					content := resp.Choices[0].Delta.Content
+					msg = deltaAnswerMsg(content)
+				} else {
+					resp, err := c.client.CreateChatCompletion(
+						context.Background(),
+						openai.ChatCompletionRequest{
+							Model: c.conf.Model,
+						},
+					)
+					if err != nil {
+						return errMsg(err)
+					}
+					content := resp.Choices[0].Message.Content
+					msg = answerMsg(content)
 				}
-				resp, err := stream.Recv()
-				if err != nil {
-					return err
-				}
-				content = resp.Choices[0].Delta.Content
 				return nil
 			},
 			retry.Attempts(3),
@@ -275,7 +342,7 @@ func (c *ChatGPT) send(messages []openai.ChatCompletionMessage) tea.Cmd {
 		if err != nil {
 			return errMsg(err)
 		}
-		return deltaAnswerMsg(content)
+		return
 	}
 }
 
@@ -546,6 +613,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		m.viewport.SetContent(m.history.View(m.viewport.Width))
 		m.viewport.GotoBottom()
+	case answerMsg:
+		m.history.UpdatePending(string(msg), true)
+		m.chatgpt.done()
+		m.textarea.Placeholder = "Send a message..."
+		m.textarea.Focus()
 	case errMsg:
 		// Network problem or answer completed, can't tell
 		if msg == io.EOF {
