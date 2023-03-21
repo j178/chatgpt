@@ -569,13 +569,13 @@ type keyMode struct {
 var (
 	SingleLine = keyMode{
 		Name:            "SingleLine",
-		SwitchMultiline: key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "multiline mode")),
+		SwitchMultiline: key.NewBinding(key.WithKeys("ctrl+m"), key.WithHelp("ctrl+m", "multiline mode")),
 		Submit:          key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit")),
 		NewLine:         key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "insert new line")),
 	}
 	MultiLine = keyMode{
 		Name:            "MultiLine",
-		SwitchMultiline: key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "single line mode")),
+		SwitchMultiline: key.NewBinding(key.WithKeys("ctrl+m"), key.WithHelp("ctrl+m", "single line mode")),
 		Submit:          key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "submit")),
 		NewLine:         key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "insert new line")),
 	}
@@ -584,21 +584,24 @@ var (
 func defaultKeyMap() keyMap {
 	return keyMap{
 		keyMode:         SingleLine,
-		Help:            key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "show help")),
+		Help:            key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "show help")),
 		Quit:            key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
 		Copy:            key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy last answer")),
-		PrevHistory:     key.NewBinding(key.WithKeys("up"), key.WithHelp("↑", "previous question")),
-		NextHistory:     key.NewBinding(key.WithKeys("down"), key.WithHelp("↓", "next question")),
-		NewConversation: key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("ctrl+n", "new conversation")),
+		PrevHistory:     key.NewBinding(key.WithKeys("ctrl+p", "up"), key.WithHelp("ctrl+p/↑", "previous question")),
+		NextHistory:     key.NewBinding(key.WithKeys("ctrl+n", "down"), key.WithHelp("ctrl+n/↓", "next question")),
+		NewConversation: key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "new conversation")),
 		RemoveConversation: key.NewBinding(
 			key.WithKeys("ctrl+r"),
 			key.WithHelp("ctrl+r", "remove current conversation"),
 		),
 		PrevConversation: key.NewBinding(
-			key.WithKeys("ctrl+left"),
+			key.WithKeys("ctrl+h", "ctrl+left"),
 			key.WithHelp("ctrl+left", "previous conversation"),
 		),
-		NextConversation: key.NewBinding(key.WithKeys("ctrl+right"), key.WithHelp("ctrl+right", "next conversation")),
+		NextConversation: key.NewBinding(
+			key.WithKeys("ctrl+l", "ctrl+right"),
+			key.WithHelp("ctrl+right", "next conversation"),
+		),
 		ViewPortKeys: viewport.KeyMap{
 			PageDown: key.NewBinding(
 				key.WithKeys("pgdown"),
@@ -611,12 +614,12 @@ func defaultKeyMap() keyMap {
 			HalfPageUp:   key.NewBinding(key.WithDisabled()),
 			HalfPageDown: key.NewBinding(key.WithDisabled()),
 			Up: key.NewBinding(
-				key.WithKeys("ctrl+up"),
-				key.WithHelp("ctrl+up", "up"),
+				key.WithKeys("ctrl+j", "ctrl+up"),
+				key.WithHelp("ctrl+up/ctrl+↑", "up"),
 			),
 			Down: key.NewBinding(
-				key.WithKeys("ctrl+down"),
-				key.WithHelp("ctrl+down", "down"),
+				key.WithKeys("ctrl+k", "ctrl+down"),
+				key.WithHelp("ctrl+k/ctrl+↓", "down"),
 			),
 		},
 	}
@@ -887,7 +890,11 @@ func (m model) bottomLine() string {
 		bottomLine = m.help.View(m.keymap)
 	}
 	conversationIdx := m.conversations.Idx
-	bottomLine = fmt.Sprintf("(%d/%d) %s", conversationIdx+1, m.conversations.Len(), bottomLine)
+	idxStr := fmt.Sprintf("(%d/%d)", conversationIdx+1, m.conversations.Len())
+	if m.help.ShowAll {
+		idxStr = ""
+	}
+	bottomLine = idxStr + " " + bottomLine
 	return lipgloss.NewStyle().PaddingTop(1).Render(bottomLine)
 }
 
