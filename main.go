@@ -37,7 +37,7 @@ var (
 
 var (
 	debug     = os.Getenv("DEBUG") == "1"
-	promptKey = flag.String("p", "default", "Key of prompt defined in config file, or prompt itself")
+	promptKey = flag.String("p", "", "Key of prompt defined in config file, or prompt itself")
 )
 
 type (
@@ -56,13 +56,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	prompt := conf.Prompts[*promptKey]
-	if prompt == "" {
-		prompt = *promptKey
+	if *promptKey != "" {
+		conf.Default.Prompt = *promptKey
 	}
-	conf.Default.Prompt = prompt
 
-	chatgpt := newChatGPT(conf.APIKey, conf.Endpoint)
+	chatgpt := newChatGPT(conf)
 	// One-time ask-and-response mode
 	if !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd()) {
 		question, err := io.ReadAll(os.Stdin)
@@ -106,11 +104,19 @@ type ConversationConfig struct {
 	MaxTokens     int     `json:"max_tokens,omitempty"`
 }
 
-type Config struct {
+type GlobalConfig struct {
 	APIKey   string             `json:"api_key,omitempty"`
 	Endpoint string             `json:"endpoint,omitempty"`
 	Prompts  map[string]string  `json:"prompts,omitempty"`
 	Default  ConversationConfig `json:"default,omitempty"`
+}
+
+func (c GlobalConfig) LookupPrompt(key string) string {
+	prompt := c.Prompts[key]
+	if prompt == "" {
+		return key
+	}
+	return prompt
 }
 
 func configDir() (string, error) {
@@ -121,26 +127,40 @@ func configDir() (string, error) {
 	return filepath.Join(home, ".config", "chatgpt"), nil
 }
 
-func readConfig(conf *Config) error {
+func readOrWriteConfig(conf *GlobalConfig) error {
 	dir, err := configDir()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get config dir: %w", err)
 	}
-	f, err := os.Open(filepath.Join(dir, "config.json"))
+	path := filepath.Join(dir, "config.json")
+	f, err := os.Open(path)
 	if err != nil {
-		return err
+		if errors.Is(err, os.ErrNotExist) {
+			f, err := os.Create(path)
+			if err != nil {
+				return fmt.Errorf("failed to create config file: %w", err)
+			}
+			defer func() { _ = f.Close() }()
+			enc := json.NewEncoder(f)
+			enc.SetIndent("", "  ")
+			err = enc.Encode(conf)
+			if err != nil {
+				return fmt.Errorf("failed to write config file: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to open config file: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 	err = json.NewDecoder(f).Decode(conf)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read config file: %w", err)
 	}
 	return nil
 }
 
-// TODO create config
-func initConfig() (Config, error) {
-	conf := Config{
+func initConfig() (GlobalConfig, error) {
+	conf := GlobalConfig{
 		Endpoint: "https://api.openai.com/v1",
 		Prompts: map[string]string{
 			"default": "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
@@ -154,9 +174,9 @@ func initConfig() (Config, error) {
 			MaxTokens:     1024,
 		},
 	}
-	err := readConfig(&conf)
+	err := readOrWriteConfig(&conf)
 	if err != nil {
-		log.Println("Failed to read config file, using default config:", err)
+		log.Println(err)
 	}
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey != "" {
@@ -167,27 +187,28 @@ func initConfig() (Config, error) {
 		conf.Endpoint = endpoint
 	}
 	if conf.APIKey == "" {
-		return Config{}, errors.New("Missing OPENAI_API_KEY environment variable, you can find or create your API key here: https://platform.openai.com/account/api-keys")
+		return GlobalConfig{}, errors.New("Missing OPENAI_API_KEY environment variable, you can find or create your API key here: https://platform.openai.com/account/api-keys")
 	}
 	// TODO: support non-chat models
 	switch conf.Default.Model {
 	case openai.GPT3Dot5Turbo0301, openai.GPT3Dot5Turbo, openai.GPT4, openai.GPT40314, openai.GPT432K0314, openai.GPT432K:
 	default:
-		return Config{}, errors.New("Invalid model, please choose one of the following: gpt-3.5-turbo-0301, gpt-3.5-turbo, gpt-4, gpt-4-0314, gpt-4-32k-0314, gpt-4-32k")
+		return GlobalConfig{}, errors.New("Invalid model, please choose one of the following: gpt-3.5-turbo-0301, gpt-3.5-turbo, gpt-4, gpt-4-0314, gpt-4-32k-0314, gpt-4-32k")
 	}
 	return conf, nil
 }
 
 type ConversationManager struct {
 	file          string
-	conf          Config
+	globalConf    GlobalConfig
 	Conversations []*Conversation `json:"conversations"`
 	Idx           int             `json:"last_idx"`
 }
 
-func NewConversationManager(conf Config) *ConversationManager {
+func NewConversationManager(conf GlobalConfig) *ConversationManager {
 	h := &ConversationManager{
-		conf: conf,
+		globalConf: conf,
+		Idx:        -1,
 	}
 	dir, err := configDir()
 	if err != nil {
@@ -202,71 +223,68 @@ func NewConversationManager(conf Config) *ConversationManager {
 	return h
 }
 
-func (h *ConversationManager) Dump() error {
-	if h.file == "" {
+func (m *ConversationManager) Dump() error {
+	if m.file == "" {
 		return nil
 	}
-	err := createIfNotExists(h.file, false)
+	err := createIfNotExists(m.file, false)
 	if err != nil {
 		return err
 	}
-	f, err := os.Create(h.file)
+	f, err := os.Create(m.file)
 	if err != nil {
 		return err
 	}
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
-	err = enc.Encode(h)
+	err = enc.Encode(m)
 	return err
 }
 
-func (h *ConversationManager) Load() error {
-	if h.file == "" {
+func (m *ConversationManager) Load() error {
+	if m.file == "" {
 		return nil
 	}
-	f, err := os.Open(h.file)
+	f, err := os.Open(m.file)
 	if err != nil {
 		return err
 	}
-	err = json.NewDecoder(f).Decode(h)
+	err = json.NewDecoder(f).Decode(m)
 	if err != nil {
 		return err
+	}
+	for _, c := range m.Conversations {
+		c.manager = m
 	}
 	return nil
 }
 
-func (h *ConversationManager) New(conf ConversationConfig) *Conversation {
+func (m *ConversationManager) New(conf ConversationConfig) *Conversation {
 	c := &Conversation{
-		Config: conf,
+		manager: m,
+		Config:  conf,
 	}
-	h.Conversations = append(h.Conversations, c)
-	h.Idx = len(h.Conversations) - 1
+	m.Conversations = append(m.Conversations, c)
+	m.Idx = len(m.Conversations) - 1
 	return c
 }
 
-func (h *ConversationManager) RemoveCurr() {
-	if len(h.Conversations) == 0 {
+func (m *ConversationManager) RemoveCurr() {
+	if len(m.Conversations) == 0 {
 		return
 	}
-	h.Conversations = append(h.Conversations[:h.Idx], h.Conversations[h.Idx+1:]...)
-	if h.Idx >= len(h.Conversations) {
-		h.Idx = len(h.Conversations) - 1
+	m.Conversations = append(m.Conversations[:m.Idx], m.Conversations[m.Idx+1:]...)
+	if m.Idx >= len(m.Conversations) {
+		m.Idx = len(m.Conversations) - 1
 	}
 }
 
-func (h *ConversationManager) Len() int {
-	return len(h.Conversations)
+func (m *ConversationManager) Len() int {
+	return len(m.Conversations)
 }
 
-func (h *ConversationManager) Get(idx int) *Conversation {
-	if idx < 0 || idx >= len(h.Conversations) {
-		return nil
-	}
-	return h.Conversations[idx]
-}
-
-func (h *ConversationManager) GetIndex(c *Conversation) int {
-	for i, c2 := range h.Conversations {
+func (m *ConversationManager) GetIndex(c *Conversation) int {
+	for i, c2 := range m.Conversations {
 		if c == c2 {
 			return i
 		}
@@ -274,34 +292,34 @@ func (h *ConversationManager) GetIndex(c *Conversation) int {
 	return -1
 }
 
-func (h *ConversationManager) Curr() *Conversation {
-	if len(h.Conversations) == 0 {
+func (m *ConversationManager) Curr() *Conversation {
+	if len(m.Conversations) == 0 {
 		// create initial conversation using default config
-		return h.New(h.conf.Default)
+		return m.New(m.globalConf.Default)
 	}
-	return h.Conversations[h.Idx]
+	return m.Conversations[m.Idx]
 }
 
-func (h *ConversationManager) Prev() *Conversation {
-	if len(h.Conversations) == 0 {
+func (m *ConversationManager) Prev() *Conversation {
+	if len(m.Conversations) == 0 {
 		return nil
 	}
-	h.Idx--
-	if h.Idx < 0 {
-		h.Idx = len(h.Conversations) - 1
+	m.Idx--
+	if m.Idx < 0 {
+		m.Idx = 0 // dont wrap around
 	}
-	return h.Conversations[h.Idx]
+	return m.Conversations[m.Idx]
 }
 
-func (h *ConversationManager) Next() *Conversation {
-	if len(h.Conversations) == 0 {
+func (m *ConversationManager) Next() *Conversation {
+	if len(m.Conversations) == 0 {
 		return nil
 	}
-	h.Idx++
-	if h.Idx >= len(h.Conversations) {
-		h.Idx = 0
+	m.Idx++
+	if m.Idx >= len(m.Conversations) {
+		m.Idx = len(m.Conversations) - 1 // dont wrap around
 	}
-	return h.Conversations[h.Idx]
+	return m.Conversations[m.Idx]
 }
 
 type QnA struct {
@@ -310,40 +328,41 @@ type QnA struct {
 }
 
 type Conversation struct {
+	manager   *ConversationManager
 	Config    ConversationConfig `json:"config"`
 	Forgotten []QnA              `json:"forgotten,omitempty"`
 	Context   []QnA              `json:"context,omitempty"`
 	Pending   *QnA               `json:"pending,omitempty"`
 }
 
-func (h *Conversation) AddQuestion(q string) {
-	h.Pending = &QnA{Question: q}
+func (c *Conversation) AddQuestion(q string) {
+	c.Pending = &QnA{Question: q}
 }
 
-func (h *Conversation) UpdatePending(ans string, done bool) {
-	if h.Pending == nil {
+func (c *Conversation) UpdatePending(ans string, done bool) {
+	if c.Pending == nil {
 		return
 	}
-	h.Pending.Answer += ans
+	c.Pending.Answer += ans
 	if done {
-		h.Context = append(h.Context, *h.Pending)
-		if len(h.Context) > h.Config.ContextLength {
-			h.Forgotten = append(h.Forgotten, h.Context[0])
-			h.Context = h.Context[1:]
+		c.Context = append(c.Context, *c.Pending)
+		if len(c.Context) > c.Config.ContextLength {
+			c.Forgotten = append(c.Forgotten, c.Context[0])
+			c.Context = c.Context[1:]
 		}
-		h.Pending = nil
+		c.Pending = nil
 	}
 }
 
-func (h *Conversation) GetContext() []openai.ChatCompletionMessage {
-	messages := make([]openai.ChatCompletionMessage, 0, 2*len(h.Context)+2)
+func (c *Conversation) GetContext() []openai.ChatCompletionMessage {
+	messages := make([]openai.ChatCompletionMessage, 0, 2*len(c.Context)+2)
 	messages = append(
 		messages, openai.ChatCompletionMessage{
 			Role:    openai.ChatMessageRoleSystem,
-			Content: h.Config.Prompt,
+			Content: c.manager.globalConf.LookupPrompt(c.Config.Prompt),
 		},
 	)
-	for _, c := range h.Context {
+	for _, c := range c.Context {
 		messages = append(
 			messages, openai.ChatCompletionMessage{
 				Role:    openai.ChatMessageRoleUser,
@@ -357,58 +376,59 @@ func (h *Conversation) GetContext() []openai.ChatCompletionMessage {
 			},
 		)
 	}
-	if h.Pending != nil {
+	if c.Pending != nil {
 		messages = append(
 			messages, openai.ChatCompletionMessage{
 				Role:    openai.ChatMessageRoleUser,
-				Content: h.Pending.Question,
+				Content: c.Pending.Question,
 			},
 		)
 	}
 	return messages
 }
 
-func (h *Conversation) PendingAnswer() string {
-	if h.Pending == nil {
+func (c *Conversation) PendingAnswer() string {
+	if c.Pending == nil {
 		return ""
 	}
-	return h.Pending.Answer
+	return c.Pending.Answer
 }
 
-func (h *Conversation) LastAnswer() string {
-	if len(h.Context) == 0 {
+func (c *Conversation) LastAnswer() string {
+	if len(c.Context) == 0 {
 		return ""
 	}
-	return h.Context[len(h.Context)-1].Answer
+	return c.Context[len(c.Context)-1].Answer
 }
 
-func (h *Conversation) Len() int {
-	return len(h.Forgotten) + len(h.Context)
+func (c *Conversation) Len() int {
+	return len(c.Forgotten) + len(c.Context)
 }
 
-func (h *Conversation) GetQuestion(idx int) string {
-	if idx < 0 || idx >= h.Len() {
+func (c *Conversation) GetQuestion(idx int) string {
+	if idx < 0 || idx >= c.Len() {
 		return ""
 	}
-	if idx < len(h.Forgotten) {
-		return h.Forgotten[idx].Question
+	if idx < len(c.Forgotten) {
+		return c.Forgotten[idx].Question
 	}
-	return h.Context[idx-len(h.Forgotten)].Question
+	return c.Context[idx-len(c.Forgotten)].Question
 }
 
 type ChatGPT struct {
-	client    *openai.Client
-	stream    *openai.ChatCompletionStream
-	answering bool
+	globalConf GlobalConfig
+	client     *openai.Client
+	stream     *openai.ChatCompletionStream
+	answering  bool
 }
 
-func newChatGPT(apiKey, endpoint string) *ChatGPT {
-	config := openai.DefaultConfig(apiKey)
-	if endpoint != "" {
-		config.BaseURL = endpoint
+func newChatGPT(conf GlobalConfig) *ChatGPT {
+	config := openai.DefaultConfig(conf.APIKey)
+	if conf.Endpoint != "" {
+		config.BaseURL = conf.Endpoint
 	}
 	client := openai.NewClientWithConfig(config)
-	return &ChatGPT{client: client}
+	return &ChatGPT{globalConf: conf, client: client}
 }
 
 func (c *ChatGPT) ask(conf ConversationConfig, question string) (string, error) {
@@ -417,7 +437,7 @@ func (c *ChatGPT) ask(conf ConversationConfig, question string) (string, error) 
 		openai.ChatCompletionRequest{
 			Model: conf.Model,
 			Messages: []openai.ChatCompletionMessage{
-				{Role: openai.ChatMessageRoleSystem, Content: conf.Prompt},
+				{Role: openai.ChatMessageRoleSystem, Content: c.globalConf.LookupPrompt(conf.Prompt)},
 				{Role: openai.ChatMessageRoleUser, Content: question},
 			},
 			MaxTokens:   conf.MaxTokens,
@@ -715,7 +735,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keymap.NewConversation):
 			m.err = nil
 			// TODO change config when creating new conversation
-			m.conversations.New(m.conversations.conf.Default)
+			m.conversations.New(m.conversations.globalConf.Default)
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
 		case key.Matches(msg, m.keymap.RemoveConversation):
@@ -866,6 +886,8 @@ func (m model) bottomLine() string {
 	if bottomLine == "" {
 		bottomLine = m.help.View(m.keymap)
 	}
+	conversationIdx := m.conversations.Idx
+	bottomLine = fmt.Sprintf("(%d/%d) %s", conversationIdx+1, m.conversations.Len(), bottomLine)
 	return lipgloss.NewStyle().PaddingTop(1).Render(bottomLine)
 }
 
