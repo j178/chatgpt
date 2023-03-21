@@ -453,6 +453,7 @@ func (c *ChatGPT) ask(conf ConversationConfig, question string) (string, error) 
 }
 
 func (c *ChatGPT) send(conf ConversationConfig, messages []openai.ChatCompletionMessage) tea.Cmd {
+	c.answering = true
 	return func() (msg tea.Msg) {
 		err := retry.Do(
 			func() error {
@@ -467,7 +468,6 @@ func (c *ChatGPT) send(conf ConversationConfig, messages []openai.ChatCompletion
 							N:           1,
 						},
 					)
-					c.answering = true
 					c.stream = stream
 					if err != nil {
 						return errMsg(err)
@@ -528,7 +528,8 @@ func (c *ChatGPT) done() {
 
 type keyMap struct {
 	keyMode
-	Help               key.Binding
+	ShowHelp           key.Binding
+	HideHelp           key.Binding
 	Quit               key.Binding
 	Copy               key.Binding
 	PrevHistory        key.Binding
@@ -541,12 +542,12 @@ type keyMap struct {
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.Submit, k.Quit}
+	return []key.Binding{k.ShowHelp, k.Submit, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Help, k.Submit, k.Quit, k.SwitchMultiline, k.Copy},
+		{k.HideHelp, k.Submit, k.Quit, k.SwitchMultiline, k.Copy},
 		{k.NewConversation, k.RemoveConversation, k.PrevConversation, k.NextConversation},
 		{
 			k.PrevHistory,
@@ -584,7 +585,8 @@ var (
 func defaultKeyMap() keyMap {
 	return keyMap{
 		keyMode:         SingleLine,
-		Help:            key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "show help")),
+		ShowHelp:        key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "show help")),
+		HideHelp:        key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "hide help")),
 		Quit:            key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
 		Copy:            key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy last answer")),
 		PrevHistory:     key.NewBinding(key.WithKeys("ctrl+p", "up"), key.WithHelp("ctrl+p/↑", "previous question")),
@@ -715,7 +717,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, m.keymap.Help):
+		case key.Matches(msg, m.keymap.ShowHelp, m.keymap.HideHelp):
 			m.help.ShowAll = !m.help.ShowAll
 			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.bottomLine())
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
@@ -736,6 +738,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.Placeholder = ""
 			m.historyIdx = m.conversations.Curr().Len() + 1
 		case key.Matches(msg, m.keymap.NewConversation):
+			if m.chatgpt.answering {
+				break
+			}
 			m.err = nil
 			// TODO change config when creating new conversation
 			m.conversations.New(m.conversations.globalConf.Default)
@@ -750,11 +755,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.historyIdx = 0
 		case key.Matches(msg, m.keymap.PrevConversation):
+			if m.chatgpt.answering {
+				break
+			}
 			m.err = nil
 			m.conversations.Prev()
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
 		case key.Matches(msg, m.keymap.NextConversation):
+			if m.chatgpt.answering {
+				break
+			}
 			m.err = nil
 			m.conversations.Next()
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
@@ -890,11 +901,11 @@ func (m model) bottomLine() string {
 		bottomLine = m.help.View(m.keymap)
 	}
 	conversationIdx := m.conversations.Idx
-	idxStr := fmt.Sprintf("(%d/%d)", conversationIdx+1, m.conversations.Len())
+	idxStr := fmt.Sprintf("(%d/%d) ", conversationIdx+1, m.conversations.Len())
 	if m.help.ShowAll {
 		idxStr = ""
 	}
-	bottomLine = idxStr + " " + bottomLine
+	bottomLine = idxStr + bottomLine
 	return lipgloss.NewStyle().PaddingTop(1).Render(bottomLine)
 }
 
