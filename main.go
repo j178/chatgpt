@@ -104,12 +104,20 @@ type Config struct {
 	MaxTokens     int               `json:"max_tokens,omitempty"`
 }
 
-func readConfig(conf *Config) error {
+func configDir() (string, error) {
 	home, err := homedir.Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "chatgpt"), nil
+}
+
+func readConfig(conf *Config) error {
+	dir, err := configDir()
 	if err != nil {
 		return err
 	}
-	f, err := os.Open(filepath.Join(home, ".config", "chatgpt.json"))
+	f, err := os.Open(filepath.Join(dir, "config.json"))
 	if err != nil {
 		return err
 	}

@@ -44,7 +44,7 @@ scoop install j178/chatgpt
 
 ## Customization
 
-You can customize the model and parameters by creating a configuration file in `~/.config/chatgpt.json`.
+You can customize the model and parameters by creating a configuration file in `~/.config/chatgpt/config.json`.
 
 Here is the default configuration:
 
