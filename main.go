@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/atotto/clipboard"
 	"github.com/avast/retry-go"
@@ -43,6 +44,7 @@ type (
 	errMsg         error
 	deltaAnswerMsg string
 	answerMsg      string
+	saveMsg        struct{}
 )
 
 // TODO support switch model in TUI
@@ -50,7 +52,7 @@ type (
 
 func main() {
 	flag.Parse()
-	conf, err := getConfig()
+	conf, err := initConfig()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -58,15 +60,17 @@ func main() {
 	if prompt == "" {
 		prompt = *promptKey
 	}
+	conf.Default.Prompt = prompt
 
-	bot := newChatGPT(conf)
+	chatgpt := newChatGPT(conf.APIKey, conf.Endpoint)
 	// One-time ask-and-response mode
 	if !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd()) {
 		question, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			log.Fatal(err)
 		}
-		answer, err := bot.ask(prompt, string(question))
+		conversationConf := conf.Default
+		answer, err := chatgpt.ask(conversationConf, string(question))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -74,9 +78,9 @@ func main() {
 		return
 	}
 
-	history := NewHistory(conf.ContextLength, prompt)
+	conversations := NewConversationManager(conf)
 	p := tea.NewProgram(
-		initialModel(bot, history),
+		initialModel(chatgpt, conversations),
 		// enable mouse motion will make text not able to select
 		// tea.WithMouseCellMotion(),
 		// tea.WithAltScreen(),
@@ -93,15 +97,20 @@ func main() {
 	}
 }
 
+type ConversationConfig struct {
+	Prompt        string  `json:"prompt,omitempty"`
+	ContextLength int     `json:"context_length,omitempty"`
+	Model         string  `json:"model,omitempty"`
+	Stream        bool    `json:"stream,omitempty"`
+	Temperature   float32 `json:"temperature,omitempty"`
+	MaxTokens     int     `json:"max_tokens,omitempty"`
+}
+
 type Config struct {
-	APIKey        string            `json:"api_key,omitempty"`
-	Endpoint      string            `json:"endpoint,omitempty"`
-	Prompts       map[string]string `json:"prompts,omitempty"`
-	ContextLength int               `json:"context_length,omitempty"`
-	Model         string            `json:"model,omitempty"`
-	Stream        bool              `json:"stream,omitempty"`
-	Temperature   float32           `json:"temperature,omitempty"`
-	MaxTokens     int               `json:"max_tokens,omitempty"`
+	APIKey   string             `json:"api_key,omitempty"`
+	Endpoint string             `json:"endpoint,omitempty"`
+	Prompts  map[string]string  `json:"prompts,omitempty"`
+	Default  ConversationConfig `json:"default,omitempty"`
 }
 
 func configDir() (string, error) {
@@ -129,17 +138,21 @@ func readConfig(conf *Config) error {
 	return nil
 }
 
-func getConfig() (Config, error) {
+// TODO create config
+func initConfig() (Config, error) {
 	conf := Config{
 		Endpoint: "https://api.openai.com/v1",
 		Prompts: map[string]string{
 			"default": "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
 		},
-		Model:         openai.GPT3Dot5Turbo,
-		ContextLength: 6,
-		Stream:        true,
-		Temperature:   0,
-		MaxTokens:     1024,
+		Default: ConversationConfig{
+			Model:         openai.GPT3Dot5Turbo,
+			Prompt:        "default",
+			ContextLength: 6,
+			Stream:        true,
+			Temperature:   0,
+			MaxTokens:     1024,
+		},
 	}
 	err := readConfig(&conf)
 	if err != nil {
@@ -157,7 +170,7 @@ func getConfig() (Config, error) {
 		return Config{}, errors.New("Missing OPENAI_API_KEY environment variable, you can find or create your API key here: https://platform.openai.com/account/api-keys")
 	}
 	// TODO: support non-chat models
-	switch conf.Model {
+	switch conf.Default.Model {
 	case openai.GPT3Dot5Turbo0301, openai.GPT3Dot5Turbo, openai.GPT4, openai.GPT40314, openai.GPT432K0314, openai.GPT432K:
 	default:
 		return Config{}, errors.New("Invalid model, please choose one of the following: gpt-3.5-turbo-0301, gpt-3.5-turbo, gpt-4, gpt-4-0314, gpt-4-32k-0314, gpt-4-32k")
@@ -165,38 +178,23 @@ func getConfig() (Config, error) {
 	return conf, nil
 }
 
-type Conversation struct {
-	Question string `json:"question"`
-	Answer   string `json:"answer"`
+type ConversationManager struct {
+	file          string
+	conf          Config
+	Conversations []*Conversation `json:"conversations"`
+	Idx           int             `json:"last_idx"`
 }
 
-type History struct {
-	Limit     int            `json:"-"`
-	Prompt    string         `json:"prompt"`
-	Forgotten []Conversation `json:"forgotten,omitempty"`
-	Context   []Conversation `json:"context,omitempty"`
-	Pending   *Conversation  `json:"pending,omitempty"`
-	File      string         `json:"-"`
-	renderer  *glamour.TermRenderer
-}
-
-func NewHistory(limit int, prompt string) *History {
-	renderer, _ := glamour.NewTermRenderer(
-		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(0), // we do hard-wrapping ourselves
-	)
-	h := &History{
-		Limit:    limit,
-		Prompt:   prompt,
-		renderer: renderer,
-		File:     "",
+func NewConversationManager(conf Config) *ConversationManager {
+	h := &ConversationManager{
+		conf: conf,
 	}
 	dir, err := configDir()
 	if err != nil {
 		log.Println("Failed to get config dir:", err)
 		return h
 	}
-	h.File = filepath.Join(dir, "history.json")
+	h.file = filepath.Join(dir, "conversations.json")
 	err = h.Load()
 	if err != nil {
 		log.Println("Failed to load history:", err)
@@ -204,11 +202,15 @@ func NewHistory(limit int, prompt string) *History {
 	return h
 }
 
-func (h *History) Dump() error {
-	if h.File == "" {
+func (h *ConversationManager) Dump() error {
+	if h.file == "" {
 		return nil
 	}
-	f, err := os.Create(h.File)
+	err := createIfNotExists(h.file, false)
+	if err != nil {
+		return err
+	}
+	f, err := os.Create(h.file)
 	if err != nil {
 		return err
 	}
@@ -218,11 +220,11 @@ func (h *History) Dump() error {
 	return err
 }
 
-func (h *History) Load() error {
-	if h.File == "" {
+func (h *ConversationManager) Load() error {
+	if h.file == "" {
 		return nil
 	}
-	f, err := os.Open(h.File)
+	f, err := os.Open(h.file)
 	if err != nil {
 		return err
 	}
@@ -233,18 +235,99 @@ func (h *History) Load() error {
 	return nil
 }
 
-func (h *History) AddQuestion(q string) {
-	h.Pending = &Conversation{Question: q}
+func (h *ConversationManager) New(conf ConversationConfig) *Conversation {
+	c := &Conversation{
+		Config: conf,
+	}
+	h.Conversations = append(h.Conversations, c)
+	h.Idx = len(h.Conversations) - 1
+	return c
 }
 
-func (h *History) UpdatePending(ans string, done bool) {
+func (h *ConversationManager) RemoveCurr() {
+	if len(h.Conversations) == 0 {
+		return
+	}
+	h.Conversations = append(h.Conversations[:h.Idx], h.Conversations[h.Idx+1:]...)
+	if h.Idx >= len(h.Conversations) {
+		h.Idx = len(h.Conversations) - 1
+	}
+}
+
+func (h *ConversationManager) Len() int {
+	return len(h.Conversations)
+}
+
+func (h *ConversationManager) Get(idx int) *Conversation {
+	if idx < 0 || idx >= len(h.Conversations) {
+		return nil
+	}
+	return h.Conversations[idx]
+}
+
+func (h *ConversationManager) GetIndex(c *Conversation) int {
+	for i, c2 := range h.Conversations {
+		if c == c2 {
+			return i
+		}
+	}
+	return -1
+}
+
+func (h *ConversationManager) Curr() *Conversation {
+	if len(h.Conversations) == 0 {
+		// create initial conversation using default config
+		return h.New(h.conf.Default)
+	}
+	return h.Conversations[h.Idx]
+}
+
+func (h *ConversationManager) Prev() *Conversation {
+	if len(h.Conversations) == 0 {
+		return nil
+	}
+	h.Idx--
+	if h.Idx < 0 {
+		h.Idx = len(h.Conversations) - 1
+	}
+	return h.Conversations[h.Idx]
+}
+
+func (h *ConversationManager) Next() *Conversation {
+	if len(h.Conversations) == 0 {
+		return nil
+	}
+	h.Idx++
+	if h.Idx >= len(h.Conversations) {
+		h.Idx = 0
+	}
+	return h.Conversations[h.Idx]
+}
+
+type QnA struct {
+	Question string `json:"question"`
+	Answer   string `json:"answer"`
+}
+
+type Conversation struct {
+	Config    ConversationConfig `json:"config"`
+	Forgotten []QnA              `json:"forgotten,omitempty"`
+	Context   []QnA              `json:"context,omitempty"`
+	Pending   *QnA               `json:"pending,omitempty"`
+}
+
+func (h *Conversation) AddQuestion(q string) {
+	h.Pending = &QnA{Question: q}
+}
+
+func (h *Conversation) UpdatePending(ans string, done bool) {
 	if h.Pending == nil {
 		return
 	}
 	h.Pending.Answer += ans
 	if done {
 		h.Context = append(h.Context, *h.Pending)
-		if len(h.Context) > h.Limit {
+		if len(h.Context) > h.Config.ContextLength {
 			h.Forgotten = append(h.Forgotten, h.Context[0])
 			h.Context = h.Context[1:]
 		}
@@ -252,18 +335,12 @@ func (h *History) UpdatePending(ans string, done bool) {
 	}
 }
 
-func (h *History) Clear() {
-	h.Forgotten = h.Forgotten[:0]
-	h.Context = h.Context[:0]
-	h.Pending = nil
-}
-
-func (h *History) GetContext() []openai.ChatCompletionMessage {
+func (h *Conversation) GetContext() []openai.ChatCompletionMessage {
 	messages := make([]openai.ChatCompletionMessage, 0, 2*len(h.Context)+2)
 	messages = append(
 		messages, openai.ChatCompletionMessage{
 			Role:    openai.ChatMessageRoleSystem,
-			Content: h.Prompt,
+			Content: h.Config.Prompt,
 		},
 	)
 	for _, c := range h.Context {
@@ -291,25 +368,25 @@ func (h *History) GetContext() []openai.ChatCompletionMessage {
 	return messages
 }
 
-func (h *History) PendingAnswer() string {
+func (h *Conversation) PendingAnswer() string {
 	if h.Pending == nil {
 		return ""
 	}
 	return h.Pending.Answer
 }
 
-func (h *History) LastAnswer() string {
+func (h *Conversation) LastAnswer() string {
 	if len(h.Context) == 0 {
 		return ""
 	}
 	return h.Context[len(h.Context)-1].Answer
 }
 
-func (h *History) Len() int {
+func (h *Conversation) Len() int {
 	return len(h.Forgotten) + len(h.Context)
 }
 
-func (h *History) GetQuestion(idx int) string {
+func (h *Conversation) GetQuestion(idx int) string {
 	if idx < 0 || idx >= h.Len() {
 		return ""
 	}
@@ -319,71 +396,32 @@ func (h *History) GetQuestion(idx int) string {
 	return h.Context[idx-len(h.Forgotten)].Question
 }
 
-func (h *History) View(maxWidth int) string {
-	var sb strings.Builder
-	renderYou := func(content string) {
-		sb.WriteString(senderStyle.Render("You: "))
-		content = wrap.String(content, maxWidth-5)
-		content, _ = h.renderer.Render(content)
-		sb.WriteString(ensureTrailingNewline(content))
-	}
-	renderBot := func(content string) {
-		if content == "" {
-			return
-		}
-		sb.WriteString(botStyle.Render("ChatGPT: "))
-		content = wrap.String(content, maxWidth-5)
-		content, _ = h.renderer.Render(content)
-		sb.WriteString(ensureTrailingNewline(content))
-	}
-	for _, m := range h.Forgotten {
-		renderYou(m.Question)
-		renderBot(m.Answer)
-	}
-	if len(h.Forgotten) > 0 {
-		// TODO add a separator to indicate the previous messages are forgotten
-	}
-	for _, m := range h.Context {
-		renderYou(m.Question)
-		renderBot(m.Answer)
-	}
-	if h.Pending != nil {
-		renderYou(h.Pending.Question)
-		renderBot(h.Pending.Answer)
-	}
-	return sb.String()
-}
-
 type ChatGPT struct {
 	client    *openai.Client
-	conf      Config
 	stream    *openai.ChatCompletionStream
 	answering bool
 }
 
-func newChatGPT(conf Config) *ChatGPT {
-	config := openai.DefaultConfig(conf.APIKey)
-	if conf.Endpoint != "" {
-		config.BaseURL = conf.Endpoint
+func newChatGPT(apiKey, endpoint string) *ChatGPT {
+	config := openai.DefaultConfig(apiKey)
+	if endpoint != "" {
+		config.BaseURL = endpoint
 	}
 	client := openai.NewClientWithConfig(config)
-	return &ChatGPT{
-		client: client,
-		conf:   conf,
-	}
+	return &ChatGPT{client: client}
 }
 
-func (c *ChatGPT) ask(prompt string, question string) (string, error) {
+func (c *ChatGPT) ask(conf ConversationConfig, question string) (string, error) {
 	resp, err := c.client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: c.conf.Model,
+			Model: conf.Model,
 			Messages: []openai.ChatCompletionMessage{
-				{Role: openai.ChatMessageRoleSystem, Content: prompt},
+				{Role: openai.ChatMessageRoleSystem, Content: conf.Prompt},
 				{Role: openai.ChatMessageRoleUser, Content: question},
 			},
-			MaxTokens:   c.conf.MaxTokens,
-			Temperature: c.conf.Temperature,
+			MaxTokens:   conf.MaxTokens,
+			Temperature: conf.Temperature,
 			N:           1,
 		},
 	)
@@ -394,18 +432,18 @@ func (c *ChatGPT) ask(prompt string, question string) (string, error) {
 	return content, nil
 }
 
-func (c *ChatGPT) send(messages []openai.ChatCompletionMessage) tea.Cmd {
+func (c *ChatGPT) send(conf ConversationConfig, messages []openai.ChatCompletionMessage) tea.Cmd {
 	return func() (msg tea.Msg) {
 		err := retry.Do(
 			func() error {
-				if c.conf.Stream {
+				if conf.Stream {
 					stream, err := c.client.CreateChatCompletionStream(
 						context.Background(),
 						openai.ChatCompletionRequest{
-							Model:       c.conf.Model,
+							Model:       conf.Model,
 							Messages:    messages,
-							MaxTokens:   c.conf.MaxTokens,
-							Temperature: c.conf.Temperature,
+							MaxTokens:   conf.MaxTokens,
+							Temperature: conf.Temperature,
 							N:           1,
 						},
 					)
@@ -424,10 +462,10 @@ func (c *ChatGPT) send(messages []openai.ChatCompletionMessage) tea.Cmd {
 					resp, err := c.client.CreateChatCompletion(
 						context.Background(),
 						openai.ChatCompletionRequest{
-							Model:       c.conf.Model,
+							Model:       conf.Model,
 							Messages:    messages,
-							MaxTokens:   c.conf.MaxTokens,
-							Temperature: c.conf.Temperature,
+							MaxTokens:   conf.MaxTokens,
+							Temperature: conf.Temperature,
 							N:           1,
 						},
 					)
@@ -470,13 +508,16 @@ func (c *ChatGPT) done() {
 
 type keyMap struct {
 	keyMode
-	Help         key.Binding
-	Clear        key.Binding
-	Quit         key.Binding
-	Copy         key.Binding
-	HistoryPrev  key.Binding
-	HistoryNext  key.Binding
-	ViewPortKeys viewport.KeyMap
+	Help               key.Binding
+	Quit               key.Binding
+	Copy               key.Binding
+	PrevHistory        key.Binding
+	NextHistory        key.Binding
+	NewConversation    key.Binding
+	RemoveConversation key.Binding
+	PrevConversation   key.Binding
+	NextConversation   key.Binding
+	ViewPortKeys       viewport.KeyMap
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
@@ -485,10 +526,11 @@ func (k keyMap) ShortHelp() []key.Binding {
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Help, k.Submit, k.Quit, k.Clear, k.Switch, k.Copy},
+		{k.Help, k.Submit, k.Quit, k.SwitchMultiline, k.Copy},
+		{k.NewConversation, k.RemoveConversation, k.PrevConversation, k.NextConversation},
 		{
-			k.HistoryPrev,
-			k.HistoryNext,
+			k.PrevHistory,
+			k.NextHistory,
 			k.ViewPortKeys.Up,
 			k.ViewPortKeys.Down,
 			k.ViewPortKeys.PageUp,
@@ -498,36 +540,45 @@ func (k keyMap) FullHelp() [][]key.Binding {
 }
 
 type keyMode struct {
-	Name    string
-	Switch  key.Binding
-	Submit  key.Binding
-	NewLine key.Binding
+	Name            string
+	SwitchMultiline key.Binding
+	Submit          key.Binding
+	NewLine         key.Binding
 }
 
 var (
 	SingleLine = keyMode{
-		Name:    "SingleLine",
-		Switch:  key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "multiline mode")),
-		Submit:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit")),
-		NewLine: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "insert new line")),
+		Name:            "SingleLine",
+		SwitchMultiline: key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "multiline mode")),
+		Submit:          key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit")),
+		NewLine:         key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "insert new line")),
 	}
 	MultiLine = keyMode{
-		Name:    "MultiLine",
-		Switch:  key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "single line mode")),
-		Submit:  key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "submit")),
-		NewLine: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "insert new line")),
+		Name:            "MultiLine",
+		SwitchMultiline: key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "single line mode")),
+		Submit:          key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "submit")),
+		NewLine:         key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "insert new line")),
 	}
 )
 
 func defaultKeyMap() keyMap {
 	return keyMap{
-		keyMode:     SingleLine,
-		Help:        key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "show help")),
-		Clear:       key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
-		Quit:        key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
-		Copy:        key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy last answer")),
-		HistoryPrev: key.NewBinding(key.WithKeys("up", "ctrl+p"), key.WithHelp("↑/ctrl+p", "previous question")),
-		HistoryNext: key.NewBinding(key.WithKeys("down", "ctrl+n"), key.WithHelp("↓/ctrl+n", "next question")),
+		keyMode:         SingleLine,
+		Help:            key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "show help")),
+		Quit:            key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
+		Copy:            key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy last answer")),
+		PrevHistory:     key.NewBinding(key.WithKeys("up"), key.WithHelp("↑", "previous question")),
+		NextHistory:     key.NewBinding(key.WithKeys("down"), key.WithHelp("↓", "next question")),
+		NewConversation: key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("ctrl+n", "new conversation")),
+		RemoveConversation: key.NewBinding(
+			key.WithKeys("ctrl+r"),
+			key.WithHelp("ctrl+r", "remove current conversation"),
+		),
+		PrevConversation: key.NewBinding(
+			key.WithKeys("ctrl+left"),
+			key.WithHelp("ctrl+left", "previous conversation"),
+		),
+		NextConversation: key.NewBinding(key.WithKeys("ctrl+right"), key.WithHelp("ctrl+right", "next conversation")),
 		ViewPortKeys: viewport.KeyMap{
 			PageDown: key.NewBinding(
 				key.WithKeys("pgdown"),
@@ -552,19 +603,20 @@ func defaultKeyMap() keyMap {
 }
 
 type model struct {
-	viewport   viewport.Model
-	textarea   textarea.Model
-	help       help.Model
-	err        error
-	chatgpt    *ChatGPT
-	history    *History
-	keymap     keyMap
-	width      int
-	height     int
-	historyIdx int
+	viewport      viewport.Model
+	textarea      textarea.Model
+	help          help.Model
+	err           error
+	chatgpt       *ChatGPT
+	conversations *ConversationManager
+	keymap        keyMap
+	width         int
+	height        int
+	historyIdx    int
+	renderer      *glamour.TermRenderer
 }
 
-func initialModel(chatgpt *ChatGPT, history *History) model {
+func initialModel(chatgpt *ChatGPT, conversations *ConversationManager) model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message..."
 	ta.Focus()
@@ -588,21 +640,31 @@ func initialModel(chatgpt *ChatGPT, history *History) model {
 	ta.KeyMap.InsertNewline = keymap.keyMode.NewLine
 	ta.KeyMap.TransposeCharacterBackward.SetEnabled(false)
 
+	renderer, _ := glamour.NewTermRenderer(
+		glamour.WithEnvironmentConfig(),
+		glamour.WithWordWrap(0), // we do hard-wrapping ourselves
+	)
+
 	return model{
-		textarea: ta,
-		viewport: vp,
-		help:     help.New(),
-		chatgpt:  chatgpt,
-		history:  history,
-		keymap:   keymap,
+		textarea:      ta,
+		viewport:      vp,
+		help:          help.New(),
+		chatgpt:       chatgpt,
+		conversations: conversations,
+		keymap:        keymap,
+		renderer:      renderer,
 	}
+}
+
+func savePeriodically() tea.Cmd {
+	return tea.Tick(15*time.Second, func(time.Time) tea.Msg { return saveMsg{} })
 }
 
 func (m model) Init() tea.Cmd {
 	if !debug { // disable blink when debug
-		return textarea.Blink
+		return tea.Batch(textarea.Blink, savePeriodically())
 	}
-	return nil
+	return savePeriodically()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -627,13 +689,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(m.bottomLine())
 		m.textarea.SetWidth(msg.Width)
-		m.viewport.SetContent(m.history.View(m.viewport.Width))
+		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keymap.Help):
 			m.help.ShowAll = !m.help.ShowAll
 			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.bottomLine())
-			m.viewport.SetContent(m.history.View(m.viewport.Width))
+			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		case key.Matches(msg, m.keymap.Submit):
 			if m.chatgpt.answering {
 				break
@@ -642,23 +704,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if input == "" {
 				break
 			}
-			m.history.AddQuestion(input)
-			cmds = append(cmds, m.chatgpt.send(m.history.GetContext()))
-			m.viewport.SetContent(m.history.View(m.viewport.Width))
+			m.conversations.Curr().AddQuestion(input)
+			cmds = append(cmds, m.chatgpt.send(m.conversations.Curr().Config, m.conversations.Curr().GetContext()))
+			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
 			m.textarea.Reset()
 			m.textarea.Blur()
 			m.textarea.Placeholder = ""
-			m.historyIdx = m.history.Len() + 1
-		case key.Matches(msg, m.keymap.Clear):
+			m.historyIdx = m.conversations.Curr().Len() + 1
+		case key.Matches(msg, m.keymap.NewConversation):
+			m.err = nil
+			// TODO change config when creating new conversation
+			m.conversations.New(m.conversations.conf.Default)
+			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
+			m.viewport.GotoBottom()
+		case key.Matches(msg, m.keymap.RemoveConversation):
 			if m.chatgpt.answering {
 				break
 			}
 			m.err = nil
-			m.history.Clear()
-			m.viewport.SetContent(m.history.View(m.viewport.Width))
+			m.conversations.RemoveCurr()
+			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.historyIdx = 0
-		case key.Matches(msg, m.keymap.Switch):
+		case key.Matches(msg, m.keymap.PrevConversation):
+			m.err = nil
+			m.conversations.Prev()
+			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
+			m.viewport.GotoBottom()
+		case key.Matches(msg, m.keymap.NextConversation):
+			m.err = nil
+			m.conversations.Next()
+			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
+			m.viewport.GotoBottom()
+		case key.Matches(msg, m.keymap.SwitchMultiline):
 			if m.keymap.Name == "SingleLine" {
 				m.keymap.keyMode = MultiLine
 				m.textarea.KeyMap.InsertNewline = MultiLine.NewLine
@@ -672,25 +750,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textarea.SetHeight(1)
 				m.viewport.Height++
 			}
-			m.viewport.SetContent(m.history.View(m.viewport.Width))
+			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		case key.Matches(msg, m.keymap.Copy):
-			if m.chatgpt.answering || m.history.LastAnswer() == "" {
+			if m.chatgpt.answering || m.conversations.Curr().LastAnswer() == "" {
 				break
 			}
-			_ = clipboard.WriteAll(m.history.LastAnswer())
-		case key.Matches(msg, m.keymap.HistoryNext):
+			_ = clipboard.WriteAll(m.conversations.Curr().LastAnswer())
+		case key.Matches(msg, m.keymap.NextHistory):
 			if m.chatgpt.answering {
 				break
 			}
 			idx := m.historyIdx + 1
-			if idx >= m.history.Len() {
-				m.historyIdx = m.history.Len()
+			if idx >= m.conversations.Curr().Len() {
+				m.historyIdx = m.conversations.Curr().Len()
 				m.textarea.SetValue("")
 			} else {
-				m.textarea.SetValue(m.history.GetQuestion(idx))
+				m.textarea.SetValue(m.conversations.Curr().GetQuestion(idx))
 				m.historyIdx = idx
 			}
-		case key.Matches(msg, m.keymap.HistoryPrev):
+		case key.Matches(msg, m.keymap.PrevHistory):
 			if m.chatgpt.answering {
 				break
 			}
@@ -698,42 +776,86 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if idx < 0 {
 				idx = 0
 			}
-			q := m.history.GetQuestion(idx)
+			q := m.conversations.Curr().GetQuestion(idx)
 			m.textarea.SetValue(q)
 			m.historyIdx = idx
 		case key.Matches(msg, m.keymap.Quit):
-			_ = m.history.Dump()
+			_ = m.conversations.Dump()
 			return m, tea.Quit
 		}
 	case deltaAnswerMsg:
-		m.history.UpdatePending(string(msg), false)
+		m.conversations.Curr().UpdatePending(string(msg), false)
 		cmds = append(cmds, m.chatgpt.recv())
 		m.err = nil
-		m.viewport.SetContent(m.history.View(m.viewport.Width))
+		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
 	case answerMsg:
-		m.history.UpdatePending(string(msg), true)
+		m.conversations.Curr().UpdatePending(string(msg), true)
 		m.chatgpt.done()
-		m.viewport.SetContent(m.history.View(m.viewport.Width))
+		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
 		m.textarea.Placeholder = "Send a message..."
 		m.textarea.Focus()
+	case saveMsg:
+		m.err = m.conversations.Dump()
+		cmds = append(cmds, savePeriodically())
 	case errMsg:
 		// Network problem or answer completed, can't tell
 		if msg == io.EOF {
-			if m.history.PendingAnswer() == "" {
+			if m.conversations.Curr().PendingAnswer() == "" {
 				m.err = errors.New("unexpected EOF, please try again")
 			}
 		} else {
 			m.err = msg
 		}
-		m.history.UpdatePending("", true)
+		m.conversations.Curr().UpdatePending("", true)
 		m.chatgpt.done()
 		m.textarea.Placeholder = "Send a message..."
 		m.textarea.Focus()
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m model) RenderConversation(maxWidth int) string {
+	var sb strings.Builder
+	c := m.conversations.Curr()
+	if c == nil {
+		return ""
+	}
+	renderer := m.renderer
+
+	renderYou := func(content string) {
+		sb.WriteString(senderStyle.Render("You: "))
+		content = wrap.String(content, maxWidth-5)
+		content, _ = renderer.Render(content)
+		sb.WriteString(ensureTrailingNewline(content))
+	}
+	renderBot := func(content string) {
+		if content == "" {
+			return
+		}
+		sb.WriteString(botStyle.Render("ChatGPT: "))
+		content = wrap.String(content, maxWidth-5)
+		content, _ = renderer.Render(content)
+		sb.WriteString(ensureTrailingNewline(content))
+	}
+	for _, m := range c.Forgotten {
+		renderYou(m.Question)
+		renderBot(m.Answer)
+	}
+	if len(c.Forgotten) > 0 {
+		// TODO add a separator to indicate the previous messages are forgotten
+	}
+	for _, q := range c.Context {
+		renderYou(q.Question)
+		renderBot(q.Answer)
+	}
+	if c.Pending != nil {
+		renderYou(c.Pending.Question)
+		renderBot(c.Pending.Answer)
+	}
+	return sb.String()
 }
 
 func (m model) bottomLine() string {
@@ -769,14 +891,14 @@ func createIfNotExists(path string, isDir bool) error {
 			if isDir {
 				return os.MkdirAll(path, 0o755)
 			}
-			if err := os.MkdirAll(filepath.Dir(path), 0o644); err != nil {
+			if err := os.MkdirAll(filepath.Dir(path), 0o666); err != nil {
 				return err
 			}
-			f, err := os.OpenFile(path, os.O_CREATE, 0o644)
+			f, err := os.OpenFile(path, os.O_CREATE, 0o666)
 			if err != nil {
 				return err
 			}
-			f.Close()
+			_ = f.Close()
 		}
 	}
 	return nil
