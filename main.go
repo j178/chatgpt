@@ -435,7 +435,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Quit, k.Submit, k.Clear, k.Switch, k.Copy},
+		{k.Help, k.Submit, k.Quit, k.Clear, k.Switch, k.Copy},
 		{
 			k.HistoryPrev,
 			k.HistoryNext,
