@@ -484,8 +484,8 @@ func defaultKeyMap() keyMap {
 		Clear:       key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
 		Quit:        key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
 		Copy:        key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy last answer")),
-		HistoryPrev: key.NewBinding(key.WithKeys("ctrl+p", "ctrl+up"), key.WithHelp("ctrl+p", "previous question")),
-		HistoryNext: key.NewBinding(key.WithKeys("ctrl+n", "ctrl+down"), key.WithHelp("ctrl+n", "next question")),
+		HistoryPrev: key.NewBinding(key.WithKeys("up", "ctrl+p"), key.WithHelp("↑/ctrl+p", "previous question")),
+		HistoryNext: key.NewBinding(key.WithKeys("down", "ctrl+n"), key.WithHelp("↓/ctrl+n", "next question")),
 		ViewPortKeys: viewport.KeyMap{
 			PageDown: key.NewBinding(
 				key.WithKeys("pgdown"),
@@ -495,21 +495,15 @@ func defaultKeyMap() keyMap {
 				key.WithKeys("pgup"),
 				key.WithHelp("pgup", "page up"),
 			),
-			HalfPageUp: key.NewBinding(
-				key.WithKeys("ctrl+u"),
-				key.WithHelp("ctrl+u", "½ page up"),
-			),
-			HalfPageDown: key.NewBinding(
-				key.WithKeys("ctrl+d"),
-				key.WithHelp("ctrl+d", "½ page down"),
-			),
+			HalfPageUp:   key.NewBinding(key.WithDisabled()),
+			HalfPageDown: key.NewBinding(key.WithDisabled()),
 			Up: key.NewBinding(
-				key.WithKeys("up"),
-				key.WithHelp("↑", "up"),
+				key.WithKeys("ctrl+up"),
+				key.WithHelp("ctrl+up", "up"),
 			),
 			Down: key.NewBinding(
-				key.WithKeys("down"),
-				key.WithHelp("↓", "down"),
+				key.WithKeys("ctrl+down"),
+				key.WithHelp("ctrl+down", "down"),
 			),
 		},
 	}
@@ -648,7 +642,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			idx := m.historyIdx + 1
 			if idx >= m.history.Len() {
-				m.historyIdx = m.history.Len() - 1
+				m.historyIdx = m.history.Len()
 				m.textarea.SetValue("")
 			} else {
 				m.textarea.SetValue(m.history.GetQuestion(idx))
