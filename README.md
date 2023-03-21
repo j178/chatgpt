@@ -1,6 +1,6 @@
 # Cli for ChatGPT
 
-A simple cli wrapper for ChatGPT API, powered by GPT-3.5-turbo and GPT-4 models.
+A TUI for ChatGPT API, powered by GPT-3.5-turbo and GPT-4 models.
 
 ![chat-gpt](https://user-images.githubusercontent.com/10510431/222810716-31e51038-b2f1-4ebf-bc11-c827da3ed0c9.gif)
 
