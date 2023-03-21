@@ -74,7 +74,7 @@ func main() {
 		return
 	}
 
-	history := newHistory(conf.ContextLength, prompt)
+	history := NewHistory(conf.ContextLength, prompt)
 	p := tea.NewProgram(
 		initialModel(bot, history),
 		// enable mouse motion will make text not able to select
@@ -166,29 +166,71 @@ func getConfig() (Config, error) {
 }
 
 type Conversation struct {
-	Question string
-	Answer   string
+	Question string `json:"question"`
+	Answer   string `json:"answer"`
 }
 
 type History struct {
-	Limit     int
-	Prompt    string
-	Forgotten []Conversation
-	Context   []Conversation
-	Pending   *Conversation
+	Limit     int            `json:"-"`
+	Prompt    string         `json:"prompt"`
+	Forgotten []Conversation `json:"forgotten,omitempty"`
+	Context   []Conversation `json:"context,omitempty"`
+	Pending   *Conversation  `json:"pending,omitempty"`
+	File      string         `json:"-"`
 	renderer  *glamour.TermRenderer
 }
 
-func newHistory(limit int, prompt string) *History {
+func NewHistory(limit int, prompt string) *History {
 	renderer, _ := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
 		glamour.WithWordWrap(0), // we do hard-wrapping ourselves
 	)
-	return &History{
+	h := &History{
 		Limit:    limit,
 		Prompt:   prompt,
 		renderer: renderer,
+		File:     "",
 	}
+	dir, err := configDir()
+	if err != nil {
+		log.Println("Failed to get config dir:", err)
+		return h
+	}
+	h.File = filepath.Join(dir, "history.json")
+	err = h.Load()
+	if err != nil {
+		log.Println("Failed to load history:", err)
+	}
+	return h
+}
+
+func (h *History) Dump() error {
+	if h.File == "" {
+		return nil
+	}
+	f, err := os.Create(h.File)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	err = enc.Encode(h)
+	return err
+}
+
+func (h *History) Load() error {
+	if h.File == "" {
+		return nil
+	}
+	f, err := os.Open(h.File)
+	if err != nil {
+		return err
+	}
+	err = json.NewDecoder(f).Decode(h)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (h *History) AddQuestion(q string) {
@@ -660,6 +702,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.SetValue(q)
 			m.historyIdx = idx
 		case key.Matches(msg, m.keymap.Quit):
+			_ = m.history.Dump()
 			return m, tea.Quit
 		}
 	case deltaAnswerMsg:
@@ -718,4 +761,23 @@ func ensureTrailingNewline(s string) string {
 		return s + "\n"
 	}
 	return s
+}
+
+func createIfNotExists(path string, isDir bool) error {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			if isDir {
+				return os.MkdirAll(path, 0o755)
+			}
+			if err := os.MkdirAll(filepath.Dir(path), 0o644); err != nil {
+				return err
+			}
+			f, err := os.OpenFile(path, os.O_CREATE, 0o644)
+			if err != nil {
+				return err
+			}
+			f.Close()
+		}
+	}
+	return nil
 }
