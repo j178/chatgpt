@@ -526,8 +526,8 @@ func defaultKeyMap() keyMap {
 		Clear:       key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "restart the chat")),
 		Quit:        key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
 		Copy:        key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy last answer")),
-		HistoryPrev: key.NewBinding(key.WithKeys("up", "ctrl+p"), key.WithHelp("↑/ctrl+p", "previous question")),
-		HistoryNext: key.NewBinding(key.WithKeys("down", "ctrl+n"), key.WithHelp("↓/ctrl+n", "next question")),
+		HistoryPrev: key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "previous question")),
+		HistoryNext: key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("ctrl+n", "next question")),
 		ViewPortKeys: viewport.KeyMap{
 			PageDown: key.NewBinding(
 				key.WithKeys("pgdown"),
@@ -540,12 +540,12 @@ func defaultKeyMap() keyMap {
 			HalfPageUp:   key.NewBinding(key.WithDisabled()),
 			HalfPageDown: key.NewBinding(key.WithDisabled()),
 			Up: key.NewBinding(
-				key.WithKeys("ctrl+up"),
-				key.WithHelp("ctrl+up", "up"),
+				key.WithKeys("up"),
+				key.WithHelp("↑", "up"),
 			),
 			Down: key.NewBinding(
-				key.WithKeys("ctrl+down"),
-				key.WithHelp("ctrl+down", "down"),
+				key.WithKeys("down"),
+				key.WithHelp("↓", "down"),
 			),
 		},
 	}
