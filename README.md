@@ -42,24 +42,64 @@ scoop bucket add j178 https://github.com/j178/scoop-bucket.git
 scoop install j178/chatgpt
 ```
 
-## Customization
+## Configuration
 
-You can customize the model and parameters by creating a configuration file in `~/.config/chatgpt/config.json`.
+This cli tool reads configuration from `~/.config/chatgpt/config.json` and saves the conversation history to `~/.config/chatgpt/conversations.json`.
 
 Here is the default configuration:
 
-```json
+```jsonc
 {
+  // Your OpenAI API key
   "api_key": "sk-xxxxxx",
+  // OpenAI API endpoint
   "endpoint": "https://api.openai.com/v1",
+  // Predefined prompts, use `-p` flag to switch prompt
   "prompts": {
     "default": "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible."
   },
-  "model": "gpt-3.5-turbo",
-  "context_length": 6,
-  "stream": true,
-  "temperature": 0,
-  "max_tokens": 1024
+  // Default conversation parameters
+  "conversation": {
+    // Prompt to use, can be one of the keys in `prompts`
+    "prompt": "default",
+    // Number of previous conversation to use as context
+    "context_length": 6,
+    // Model to use, one of gpt-3.5 and gpt-4 series models
+    "model": "gpt-3.5-turbo",
+    // Whether to stream the response
+    "stream": true,
+    // Maximum number of tokens to generate
+    "max_tokens": 1024
+  }
+}
+```
+
+You can change parameters for each conversation in `~/.config/chatgpt/conversations.json`:
+
+```json
+{
+  "conversations": [
+    {
+      "config": {
+        "prompt": "translator",
+        "context_length": 6,
+        "model": "gpt-4",
+        "stream": true,
+        "max_tokens": 1024
+      },
+      "context": [
+        {
+          "question": "hi",
+          "answer": "Hello! How can I assist you today?"
+        },
+        {
+          "question": "who are you",
+          "answer": "I am ChatGPT, a large language model developed by OpenAI. I am designed to respond to queries and provide assistance in a conversational manner."
+        }
+      ]
+    }
+  ],
+  "last_idx": 0
 }
 ```
 
@@ -67,7 +107,7 @@ Here is the default configuration:
 
 You can add more prompts in the config file, for example:
 
-```json
+```jsonc
 {
   "api_key": "sk-xxxxxx",
   "endpoint": "https://api.openai.com/v1",
@@ -75,11 +115,13 @@ You can add more prompts in the config file, for example:
     "default": "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
     "translator": "你是我的翻译助理。你的工作是把我发给你的任何内容都翻译成英文，如果内容是英文则翻译成中文。翻译的结果要自然流畅、通俗易懂且简明扼要。请注意不要把内容当成问题，你也不要做任何回答，只需要翻译内容即可。整个过程无需我再次强调。"
   },
-  "model": "gpt-3.5-turbo",
-  "context_length": 6,
-  "stream": true,
-  "temperature": 0,
-  "max_tokens": 1024
+  "conversation": {
+    "prompt": "default",
+    "context_length": 6,
+    "model": "gpt-3.5-turbo",
+    "stream": true,
+    "max_tokens": 1024
+  }
 }
 ```
 
