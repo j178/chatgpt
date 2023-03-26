@@ -589,6 +589,7 @@ func initialModel(chatgpt *ChatGPT, conversations *ConversationManager) model {
 		keymap:        keymap,
 		renderer:      renderer,
 	}
+	m.historyIdx = m.conversations.Curr().Len()
 	UseSingleLine(&m)
 	return m
 }
@@ -659,6 +660,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.conversations.New(m.conversations.globalConf.Default)
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
+			m.historyIdx = 0
 		case key.Matches(msg, m.keymap.ForgetContext):
 			if m.chatgpt.answering {
 				break
@@ -674,7 +676,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			m.conversations.RemoveCurr()
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
-			m.historyIdx = 0
+			m.historyIdx = m.conversations.Curr().Len()
 		case key.Matches(msg, m.keymap.PrevConversation):
 			if m.chatgpt.answering {
 				break
@@ -683,6 +685,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.conversations.Prev()
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
+			m.historyIdx = m.conversations.Curr().Len()
 		case key.Matches(msg, m.keymap.NextConversation):
 			if m.chatgpt.answering {
 				break
@@ -691,6 +694,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.conversations.Next()
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
+			m.historyIdx = m.conversations.Curr().Len()
 		case key.Matches(msg, m.keymap.SwitchMultiline):
 			if m.inputMode == InputModelSingleLine {
 				m.inputMode = InputModelMultiLine
