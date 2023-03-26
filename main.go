@@ -57,7 +57,7 @@ func main() {
 		log.Fatal(err)
 	}
 	if *promptKey != "" {
-		conf.Default.Prompt = *promptKey
+		conf.Conversation.Prompt = *promptKey
 	}
 
 	chatgpt := newChatGPT(conf)
@@ -67,7 +67,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		conversationConf := conf.Default
+		conversationConf := conf.Conversation
 		answer, err := chatgpt.ask(conversationConf, string(question))
 		if err != nil {
 			log.Fatal(err)
@@ -105,10 +105,10 @@ type ConversationConfig struct {
 }
 
 type GlobalConfig struct {
-	APIKey   string             `json:"api_key,omitempty"`
-	Endpoint string             `json:"endpoint,omitempty"`
-	Prompts  map[string]string  `json:"prompts,omitempty"`
-	Default  ConversationConfig `json:"default,omitempty"`
+	APIKey       string             `json:"api_key,omitempty"`
+	Endpoint     string             `json:"endpoint,omitempty"`
+	Prompts      map[string]string  `json:"prompts,omitempty"`
+	Conversation ConversationConfig `json:"conversation,omitempty"`
 }
 
 func (c GlobalConfig) LookupPrompt(key string) string {
@@ -167,7 +167,7 @@ func initConfig() (GlobalConfig, error) {
 		Prompts: map[string]string{
 			"default": "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
 		},
-		Default: ConversationConfig{
+		Conversation: ConversationConfig{
 			Model:         openai.GPT3Dot5Turbo,
 			Prompt:        "default",
 			ContextLength: 6,
@@ -192,7 +192,7 @@ func initConfig() (GlobalConfig, error) {
 		return GlobalConfig{}, errors.New("Missing OPENAI_API_KEY environment variable, you can find or create your API key here: https://platform.openai.com/account/api-keys")
 	}
 	// TODO: support non-chat models
-	switch conf.Default.Model {
+	switch conf.Conversation.Model {
 	case openai.GPT3Dot5Turbo0301, openai.GPT3Dot5Turbo, openai.GPT4, openai.GPT40314, openai.GPT432K0314, openai.GPT432K:
 	default:
 		return GlobalConfig{}, errors.New("Invalid model, please choose one of the following: gpt-3.5-turbo-0301, gpt-3.5-turbo, gpt-4, gpt-4-0314, gpt-4-32k-0314, gpt-4-32k")
@@ -297,7 +297,7 @@ func (m *ConversationManager) GetIndex(c *Conversation) int {
 func (m *ConversationManager) Curr() *Conversation {
 	if len(m.Conversations) == 0 {
 		// create initial conversation using default config
-		return m.New(m.globalConf.Default)
+		return m.New(m.globalConf.Conversation)
 	}
 	return m.Conversations[m.Idx]
 }
@@ -657,7 +657,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.err = nil
 			// TODO change config when creating new conversation
-			m.conversations.New(m.conversations.globalConf.Default)
+			m.conversations.New(m.conversations.globalConf.Conversation)
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
 			m.historyIdx = 0
