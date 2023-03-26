@@ -133,13 +133,15 @@ func readOrWriteConfig(conf *GlobalConfig) error {
 		return fmt.Errorf("failed to get config dir: %w", err)
 	}
 	path := filepath.Join(dir, "config.json")
+
 	f, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			f, err := os.Create(path)
+			err = os.MkdirAll(filepath.Dir(path), 0o755)
 			if err != nil {
-				return fmt.Errorf("failed to create config file: %w", err)
+				return fmt.Errorf("failed to create config dir: %w", err)
 			}
+			f, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 			defer func() { _ = f.Close() }()
 			enc := json.NewEncoder(f)
 			enc.SetIndent("", "  ")
@@ -387,6 +389,11 @@ func (c *Conversation) GetContext() []openai.ChatCompletionMessage {
 	return messages
 }
 
+func (c *Conversation) ForgetContext() {
+	c.Forgotten = append(c.Forgotten, c.Context...)
+	c.Context = nil
+}
+
 func (c *Conversation) PendingAnswer() string {
 	if c.Pending == nil {
 		return ""
@@ -526,111 +533,18 @@ func (c *ChatGPT) done() {
 	c.answering = false
 }
 
-type keyMap struct {
-	keyMode
-	ShowHelp           key.Binding
-	HideHelp           key.Binding
-	Quit               key.Binding
-	Copy               key.Binding
-	PrevHistory        key.Binding
-	NextHistory        key.Binding
-	NewConversation    key.Binding
-	RemoveConversation key.Binding
-	PrevConversation   key.Binding
-	NextConversation   key.Binding
-	ViewPortKeys       viewport.KeyMap
-}
+type InputMode int
 
-func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.ShowHelp, k.Submit, k.Quit}
-}
-
-func (k keyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.HideHelp, k.Submit, k.Quit, k.SwitchMultiline, k.Copy},
-		{k.NewConversation, k.RemoveConversation, k.PrevConversation, k.NextConversation},
-		{
-			k.PrevHistory,
-			k.NextHistory,
-			k.ViewPortKeys.Up,
-			k.ViewPortKeys.Down,
-			k.ViewPortKeys.PageUp,
-			k.ViewPortKeys.PageDown,
-		},
-	}
-}
-
-type keyMode struct {
-	Name            string
-	SwitchMultiline key.Binding
-	Submit          key.Binding
-	NewLine         key.Binding
-}
-
-var (
-	SingleLine = keyMode{
-		Name:            "SingleLine",
-		SwitchMultiline: key.NewBinding(key.WithKeys("ctrl+m"), key.WithHelp("ctrl+m", "multiline mode")),
-		Submit:          key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit")),
-		NewLine:         key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "insert new line")),
-	}
-	MultiLine = keyMode{
-		Name:            "MultiLine",
-		SwitchMultiline: key.NewBinding(key.WithKeys("ctrl+m"), key.WithHelp("ctrl+m", "single line mode")),
-		Submit:          key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "submit")),
-		NewLine:         key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "insert new line")),
-	}
+const (
+	InputModelSingleLine InputMode = iota
+	InputModelMultiLine
 )
-
-func defaultKeyMap() keyMap {
-	return keyMap{
-		keyMode:         SingleLine,
-		ShowHelp:        key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "show help")),
-		HideHelp:        key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "hide help")),
-		Quit:            key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
-		Copy:            key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy last answer")),
-		PrevHistory:     key.NewBinding(key.WithKeys("ctrl+p", "up"), key.WithHelp("ctrl+p/↑", "previous question")),
-		NextHistory:     key.NewBinding(key.WithKeys("ctrl+n", "down"), key.WithHelp("ctrl+n/↓", "next question")),
-		NewConversation: key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "new conversation")),
-		RemoveConversation: key.NewBinding(
-			key.WithKeys("ctrl+r"),
-			key.WithHelp("ctrl+r", "remove current conversation"),
-		),
-		PrevConversation: key.NewBinding(
-			key.WithKeys("ctrl+h", "ctrl+left"),
-			key.WithHelp("ctrl+left", "previous conversation"),
-		),
-		NextConversation: key.NewBinding(
-			key.WithKeys("ctrl+l", "ctrl+right"),
-			key.WithHelp("ctrl+right", "next conversation"),
-		),
-		ViewPortKeys: viewport.KeyMap{
-			PageDown: key.NewBinding(
-				key.WithKeys("pgdown"),
-				key.WithHelp("pgdn", "page down"),
-			),
-			PageUp: key.NewBinding(
-				key.WithKeys("pgup"),
-				key.WithHelp("pgup", "page up"),
-			),
-			HalfPageUp:   key.NewBinding(key.WithDisabled()),
-			HalfPageDown: key.NewBinding(key.WithDisabled()),
-			Up: key.NewBinding(
-				key.WithKeys("ctrl+j", "ctrl+up"),
-				key.WithHelp("ctrl+up/ctrl+↑", "up"),
-			),
-			Down: key.NewBinding(
-				key.WithKeys("ctrl+k", "ctrl+down"),
-				key.WithHelp("ctrl+k/ctrl+↓", "down"),
-			),
-		},
-	}
-}
 
 type model struct {
 	viewport      viewport.Model
 	textarea      textarea.Model
 	help          help.Model
+	inputMode     InputMode
 	err           error
 	chatgpt       *ChatGPT
 	conversations *ConversationManager
@@ -659,26 +573,24 @@ func initialModel(chatgpt *ChatGPT, conversations *ConversationManager) model {
 	ta.ShowLineNumbers = false
 
 	vp := viewport.New(50, 5)
-
-	keymap := defaultKeyMap()
-	vp.KeyMap = keymap.ViewPortKeys
-	ta.KeyMap.InsertNewline = keymap.keyMode.NewLine
-	ta.KeyMap.TransposeCharacterBackward.SetEnabled(false)
-
 	renderer, _ := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
 		glamour.WithWordWrap(0), // we do hard-wrapping ourselves
 	)
 
-	return model{
+	keymap := defaultKeyMap()
+	m := model{
 		textarea:      ta,
 		viewport:      vp,
 		help:          help.New(),
+		inputMode:     InputModelSingleLine,
 		chatgpt:       chatgpt,
 		conversations: conversations,
 		keymap:        keymap,
 		renderer:      renderer,
 	}
+	UseSingleLine(&m)
+	return m
 }
 
 func savePeriodically() tea.Cmd {
@@ -715,6 +627,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(m.bottomLine())
 		m.textarea.SetWidth(msg.Width)
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
+		m.viewport.GotoBottom()
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keymap.ShowHelp, m.keymap.HideHelp):
@@ -746,6 +659,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.conversations.New(m.conversations.globalConf.Default)
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
+		case key.Matches(msg, m.keymap.ForgetContext):
+			if m.chatgpt.answering {
+				break
+			}
+			m.err = nil
+			m.conversations.Curr().ForgetContext()
+			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
+			m.viewport.GotoBottom()
 		case key.Matches(msg, m.keymap.RemoveConversation):
 			if m.chatgpt.answering {
 				break
@@ -771,15 +692,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
 		case key.Matches(msg, m.keymap.SwitchMultiline):
-			if m.keymap.Name == "SingleLine" {
-				m.keymap.keyMode = MultiLine
-				m.textarea.KeyMap.InsertNewline = MultiLine.NewLine
+			if m.inputMode == InputModelSingleLine {
+				m.inputMode = InputModelMultiLine
+				UseMultiLine(&m)
 				m.textarea.ShowLineNumbers = true
 				m.textarea.SetHeight(2)
 				m.viewport.Height--
 			} else {
-				m.keymap.keyMode = SingleLine
-				m.textarea.KeyMap.InsertNewline = SingleLine.NewLine
+				m.inputMode = InputModelSingleLine
+				UseSingleLine(&m)
 				m.textarea.ShowLineNumbers = false
 				m.textarea.SetHeight(1)
 				m.viewport.Height++
@@ -879,7 +800,8 @@ func (m model) RenderConversation(maxWidth int) string {
 		renderBot(m.Answer)
 	}
 	if len(c.Forgotten) > 0 {
-		// TODO add a separator to indicate the previous messages are forgotten
+		sb.WriteString(lipgloss.NewStyle().PaddingLeft(5).Faint(true).Render("----- New Session -----"))
+		sb.WriteString("\n")
 	}
 	for _, q := range c.Context {
 		renderYou(q.Question)
@@ -900,12 +822,16 @@ func (m model) bottomLine() string {
 	if bottomLine == "" {
 		bottomLine = m.help.View(m.keymap)
 	}
-	conversationIdx := m.conversations.Idx
-	idxStr := fmt.Sprintf("(%d/%d) ", conversationIdx+1, m.conversations.Len())
-	if m.help.ShowAll {
-		idxStr = ""
+	var conversationIndicator string
+	if m.conversations.Len() > 1 {
+		conversationIdx := m.conversations.Idx
+		conversationIndicator = fmt.Sprintf("(%d/%d) ", conversationIdx+1, m.conversations.Len())
 	}
-	bottomLine = idxStr + bottomLine
+	if m.help.ShowAll {
+		conversationIndicator = ""
+	}
+
+	bottomLine = conversationIndicator + bottomLine
 	return lipgloss.NewStyle().PaddingTop(1).Render(bottomLine)
 }
 
