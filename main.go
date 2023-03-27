@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/atotto/clipboard"
 	"github.com/avast/retry-go"
@@ -26,6 +27,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
+	"github.com/muesli/reflow/wordwrap"
 	"github.com/muesli/reflow/wrap"
 	"github.com/sashabaranov/go-openai"
 )
@@ -603,7 +605,6 @@ func initialModel(chatgpt *ChatGPT, conversations *ConversationManager) model {
 		textarea:      ta,
 		viewport:      vp,
 		help:          help.New(),
-		inputMode:     InputModelSingleLine,
 		chatgpt:       chatgpt,
 		conversations: conversations,
 		keymap:        keymap,
@@ -807,7 +808,11 @@ func (m model) RenderConversation(maxWidth int) string {
 
 	renderYou := func(content string) {
 		sb.WriteString(senderStyle.Render("You: "))
-		content = wrap.String(content, maxWidth-5)
+		if containsCJK(content) {
+			content = wrap.String(content, maxWidth-5)
+		} else {
+			content = wordwrap.String(content, maxWidth-5)
+		}
 		content, _ = renderer.Render(content)
 		sb.WriteString(ensureTrailingNewline(content))
 	}
@@ -816,7 +821,11 @@ func (m model) RenderConversation(maxWidth int) string {
 			return
 		}
 		sb.WriteString(botStyle.Render("ChatGPT: "))
-		content = wrap.String(content, maxWidth-5)
+		if containsCJK(content) {
+			content = wrap.String(content, maxWidth-5)
+		} else {
+			content = wordwrap.String(content, maxWidth-5)
+		}
 		content, _ = renderer.Render(content)
 		sb.WriteString(ensureTrailingNewline(content))
 	}
@@ -893,4 +902,13 @@ func createIfNotExists(path string, isDir bool) error {
 		}
 	}
 	return nil
+}
+
+func containsCJK(s string) bool {
+	for _, r := range s {
+		if unicode.In(r, unicode.Han, unicode.Hangul, unicode.Hiragana, unicode.Katakana) {
+			return true
+		}
+	}
+	return false
 }
