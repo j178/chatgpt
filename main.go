@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -36,8 +37,12 @@ var (
 )
 
 var (
-	debug     = os.Getenv("DEBUG") == "1"
-	promptKey = flag.String("p", "", "Key of prompt defined in config file, or prompt itself")
+	version     = "dev"
+	date        = "unknown"
+	commit      = "HEAD"
+	debug       = os.Getenv("DEBUG") == "1"
+	promptKey   = flag.String("p", "", "Key of prompt defined in config file, or prompt itself")
+	showVersion = flag.Bool("v", false, "Show version")
 )
 
 type (
@@ -52,6 +57,11 @@ type (
 
 func main() {
 	flag.Parse()
+	if *showVersion {
+		fmt.Print(buildVersion())
+		return
+	}
+
 	conf, err := initConfig()
 	if err != nil {
 		exit(err)
@@ -103,6 +113,18 @@ func exit(err error) {
 		err.Error(),
 	)
 	os.Exit(1)
+}
+
+func buildVersion() string {
+	result := version
+	if commit != "" {
+		result = fmt.Sprintf("%s\ncommit: %s", result, commit)
+	}
+	if date != "" {
+		result = fmt.Sprintf("%s\nbuilt at: %s", result, date)
+	}
+	result = fmt.Sprintf("%s\ngoos: %s\ngoarch: %s", result, runtime.GOOS, runtime.GOARCH)
+	return result
 }
 
 type ConversationConfig struct {
