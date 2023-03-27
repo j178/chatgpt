@@ -116,7 +116,15 @@ func defaultKeyMap() keyMap {
 	}
 }
 
-func UseSingleLine(m *model) {
+type InputMode int
+
+const (
+	InputModelSingleLine InputMode = iota
+	InputModelMultiLine
+)
+
+func UseSingleLineInputMode(m *model) {
+	m.inputMode = InputModelSingleLine
 	m.keymap.SwitchMultiline = key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "multiline mode"))
 	m.keymap.Submit = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit"))
 	m.keymap.TextAreaKeys.InsertNewline = key.NewBinding(
@@ -127,7 +135,8 @@ func UseSingleLine(m *model) {
 	m.textarea.KeyMap = m.keymap.TextAreaKeys
 }
 
-func UseMultiLine(m *model) {
+func UseMultiLineInputMode(m *model) {
+	m.inputMode = InputModelMultiLine
 	m.keymap.SwitchMultiline = key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "single line mode"))
 	m.keymap.Submit = key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "submit"))
 	m.keymap.TextAreaKeys.InsertNewline = key.NewBinding(

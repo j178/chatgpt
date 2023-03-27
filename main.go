@@ -54,7 +54,7 @@ func main() {
 	flag.Parse()
 	conf, err := initConfig()
 	if err != nil {
-		log.Fatal(err)
+		exit(err)
 	}
 	if *promptKey != "" {
 		conf.Conversation.Prompt = *promptKey
@@ -65,12 +65,12 @@ func main() {
 	if !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd()) {
 		question, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			log.Fatal(err)
+			exit(err)
 		}
 		conversationConf := conf.Conversation
 		answer, err := chatgpt.ask(conversationConf, string(question))
 		if err != nil {
-			log.Fatal(err)
+			exit(err)
 		}
 		fmt.Print(answer)
 		return
@@ -91,24 +91,34 @@ func main() {
 	}
 
 	if _, err := p.Run(); err != nil {
-		log.Fatal(err)
+		exit(err)
 	}
 }
 
+func exit(err error) {
+	_, _ = fmt.Fprintf(
+		os.Stderr,
+		"%s: %s\n",
+		lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render("Error"),
+		err.Error(),
+	)
+	os.Exit(1)
+}
+
 type ConversationConfig struct {
-	Prompt        string  `json:"prompt,omitempty"`
-	ContextLength int     `json:"context_length,omitempty"`
-	Model         string  `json:"model,omitempty"`
-	Stream        bool    `json:"stream,omitempty"`
-	Temperature   float32 `json:"temperature,omitempty"`
-	MaxTokens     int     `json:"max_tokens,omitempty"`
+	Prompt        string  `json:"prompt"`
+	ContextLength int     `json:"context_length"`
+	Model         string  `json:"model"`
+	Stream        bool    `json:"stream"`
+	Temperature   float32 `json:"temperature"`
+	MaxTokens     int     `json:"max_tokens"`
 }
 
 type GlobalConfig struct {
-	APIKey       string             `json:"api_key,omitempty"`
-	Endpoint     string             `json:"endpoint,omitempty"`
-	Prompts      map[string]string  `json:"prompts,omitempty"`
-	Conversation ConversationConfig `json:"conversation,omitempty"`
+	APIKey       string             `json:"api_key"`
+	Endpoint     string             `json:"endpoint"`
+	Prompts      map[string]string  `json:"prompts"`
+	Conversation ConversationConfig `json:"conversation"`
 }
 
 func (c GlobalConfig) LookupPrompt(key string) string {
@@ -189,7 +199,7 @@ func initConfig() (GlobalConfig, error) {
 		conf.Endpoint = endpoint
 	}
 	if conf.APIKey == "" {
-		return GlobalConfig{}, errors.New("Missing OPENAI_API_KEY environment variable, you can find or create your API key here: https://platform.openai.com/account/api-keys")
+		return GlobalConfig{}, errors.New("Missing API key. Set it in `~/.config/chatgpt/config.json` or by setting the `OPENAI_API_KEY` environment variable. You can find or create your API key at https://platform.openai.com/account/api-keys.")
 	}
 	// TODO: support non-chat models
 	switch conf.Conversation.Model {
@@ -285,15 +295,6 @@ func (m *ConversationManager) Len() int {
 	return len(m.Conversations)
 }
 
-func (m *ConversationManager) GetIndex(c *Conversation) int {
-	for i, c2 := range m.Conversations {
-		if c == c2 {
-			return i
-		}
-	}
-	return -1
-}
-
 func (m *ConversationManager) Curr() *Conversation {
 	if len(m.Conversations) == 0 {
 		// create initial conversation using default config
@@ -356,7 +357,7 @@ func (c *Conversation) UpdatePending(ans string, done bool) {
 	}
 }
 
-func (c *Conversation) GetContext() []openai.ChatCompletionMessage {
+func (c *Conversation) GetContextMessages() []openai.ChatCompletionMessage {
 	messages := make([]openai.ChatCompletionMessage, 0, 2*len(c.Context)+2)
 	messages = append(
 		messages, openai.ChatCompletionMessage{
@@ -409,7 +410,11 @@ func (c *Conversation) LastAnswer() string {
 }
 
 func (c *Conversation) Len() int {
-	return len(c.Forgotten) + len(c.Context)
+	l := len(c.Forgotten) + len(c.Context)
+	if c.Pending != nil {
+		l++
+	}
+	return l
 }
 
 func (c *Conversation) GetQuestion(idx int) string {
@@ -533,13 +538,6 @@ func (c *ChatGPT) done() {
 	c.answering = false
 }
 
-type InputMode int
-
-const (
-	InputModelSingleLine InputMode = iota
-	InputModelMultiLine
-)
-
 type model struct {
 	viewport      viewport.Model
 	textarea      textarea.Model
@@ -590,7 +588,7 @@ func initialModel(chatgpt *ChatGPT, conversations *ConversationManager) model {
 		renderer:      renderer,
 	}
 	m.historyIdx = m.conversations.Curr().Len()
-	UseSingleLine(&m)
+	UseSingleLineInputMode(&m)
 	return m
 }
 
@@ -644,13 +642,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 			m.conversations.Curr().AddQuestion(input)
-			cmds = append(cmds, m.chatgpt.send(m.conversations.Curr().Config, m.conversations.Curr().GetContext()))
+			cmds = append(
+				cmds,
+				m.chatgpt.send(m.conversations.Curr().Config, m.conversations.Curr().GetContextMessages()),
+			)
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
 			m.textarea.Reset()
 			m.textarea.Blur()
 			m.textarea.Placeholder = ""
-			m.historyIdx = m.conversations.Curr().Len() + 1
+			m.historyIdx = m.conversations.Curr().Len()
 		case key.Matches(msg, m.keymap.NewConversation):
 			if m.chatgpt.answering {
 				break
@@ -697,14 +698,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.historyIdx = m.conversations.Curr().Len()
 		case key.Matches(msg, m.keymap.SwitchMultiline):
 			if m.inputMode == InputModelSingleLine {
-				m.inputMode = InputModelMultiLine
-				UseMultiLine(&m)
+				UseMultiLineInputMode(&m)
 				m.textarea.ShowLineNumbers = true
 				m.textarea.SetHeight(2)
 				m.viewport.Height--
 			} else {
-				m.inputMode = InputModelSingleLine
-				UseSingleLine(&m)
+				UseSingleLineInputMode(&m)
 				m.textarea.ShowLineNumbers = false
 				m.textarea.SetHeight(1)
 				m.viewport.Height++
