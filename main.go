@@ -39,13 +39,13 @@ var (
 )
 
 var (
-	version        = "dev"
-	date           = "unknown"
-	commit         = "HEAD"
-	debug          = os.Getenv("DEBUG") == "1"
-	promptKey      = flag.String("p", "", "Key of prompt defined in config file, or prompt itself")
-	showVersion    = flag.Bool("v", false, "Show version")
-	startNewPrompt = flag.Bool("n", false, "Start new prompt")
+	version              = "dev"
+	date                 = "unknown"
+	commit               = "HEAD"
+	debug                = os.Getenv("DEBUG") == "1"
+	promptKey            = flag.String("p", "", "Key of prompt defined in config file, or prompt itself")
+	showVersion          = flag.Bool("v", false, "Show version")
+	startNewConversation = flag.Bool("n", false, "Start new conversation")
 )
 
 type (
@@ -91,7 +91,7 @@ func main() {
 
 	conversations := NewConversationManager(conf)
 
-	if *startNewPrompt {
+	if *startNewConversation {
 		conversations.New(conf.Conversation)
 	}
 
