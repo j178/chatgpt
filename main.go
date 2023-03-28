@@ -39,12 +39,13 @@ var (
 )
 
 var (
-	version     = "dev"
-	date        = "unknown"
-	commit      = "HEAD"
-	debug       = os.Getenv("DEBUG") == "1"
-	promptKey   = flag.String("p", "", "Key of prompt defined in config file, or prompt itself")
-	showVersion = flag.Bool("v", false, "Show version")
+	version              = "dev"
+	date                 = "unknown"
+	commit               = "HEAD"
+	debug                = os.Getenv("DEBUG") == "1"
+	promptKey            = flag.String("p", "", "Key of prompt defined in config file, or prompt itself")
+	showVersion          = flag.Bool("v", false, "Show version")
+	startNewConversation = flag.Bool("n", false, "Start new conversation")
 )
 
 type (
@@ -89,6 +90,11 @@ func main() {
 	}
 
 	conversations := NewConversationManager(conf)
+
+	if *startNewConversation {
+		conversations.New(conf.Conversation)
+	}
+
 	p := tea.NewProgram(
 		initialModel(chatgpt, conversations),
 		// enable mouse motion will make text not able to select
