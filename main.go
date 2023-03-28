@@ -29,6 +29,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/muesli/reflow/wordwrap"
 	"github.com/muesli/reflow/wrap"
+	"github.com/postfinance/single"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -46,6 +47,7 @@ var (
 	promptKey            = flag.String("p", "", "Key of prompt defined in config file, or prompt itself")
 	showVersion          = flag.Bool("v", false, "Show version")
 	startNewConversation = flag.Bool("n", false, "Start new conversation")
+	detachMode           = flag.Bool("d", false, "Run in detach mode, conversation will not be saved")
 )
 
 type (
@@ -87,6 +89,22 @@ func main() {
 		}
 		fmt.Print(answer)
 		return
+	}
+
+	if !*detachMode {
+		lockFile, _ := single.New("chatgpt")
+		if err := lockFile.Lock(); err != nil {
+			exit(
+				fmt.Errorf(
+					"Another chatgpt instance is running, chatgpt works not well with multiple instances, "+
+						"please close the other one first. \n"+
+						"If you are sure there is no other chatgpt instance running, please delete the lock file: %s\n"+
+						"You can also try `chatgpt -d` to run in detach mode, this check will be skipped, but conversation will not be saved.",
+					lockFile.Lockfile(),
+				),
+			)
+		}
+		defer lockFile.Unlock()
 	}
 
 	conversations := NewConversationManager(conf)
@@ -626,10 +644,14 @@ func savePeriodically() tea.Cmd {
 }
 
 func (m model) Init() tea.Cmd {
+	var cmds []tea.Cmd
 	if !debug { // disable blink when debug
-		return tea.Batch(textarea.Blink, savePeriodically())
+		cmds = append(cmds, textarea.Blink)
 	}
-	return savePeriodically()
+	if !*detachMode {
+		cmds = append(cmds, savePeriodically())
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -767,7 +789,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.SetValue(q)
 			m.historyIdx = idx
 		case key.Matches(msg, m.keymap.Quit):
-			_ = m.conversations.Dump()
+			if !*detachMode {
+				_ = m.conversations.Dump()
+			}
 			return m, tea.Quit
 		}
 	case deltaAnswerMsg:

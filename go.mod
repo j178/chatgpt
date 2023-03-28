@@ -12,6 +12,7 @@ require (
 	github.com/mattn/go-isatty v0.0.17
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/muesli/reflow v0.3.0
+	github.com/postfinance/single v0.0.2
 	github.com/sashabaranov/go-openai v1.5.3
 )
 
