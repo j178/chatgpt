@@ -205,7 +205,9 @@ func initConfig() (GlobalConfig, error) {
 	conf := GlobalConfig{
 		Endpoint: "https://api.openai.com/v1",
 		Prompts: map[string]string{
-			"default": "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
+			"default":    "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
+			"translator": "I want you to act as an English translator, spelling corrector and improver. I will speak to you in any language and you will detect the language, translate it and answer in the corrected and improved version of my text, in English. I want you to replace my simplified A0-level words and sentences with more beautiful and elegant, upper level English words and sentences. The translation should be natural, easy to understand, and concise. Keep the meaning same, but make them more literary. I want you to only reply the correction, the improvements and nothing else, do not write explanations.",
+			"shell":      "Return a one-line bash command with the functionality I will describe. Return ONLY the command ready to run in the terminal. The command should do the following:",
 		},
 		Conversation: ConversationConfig{
 			Model:         openai.GPT3Dot5Turbo,
