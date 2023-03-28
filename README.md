@@ -34,6 +34,13 @@ go install github.com/j178/chatgpt@latest
 ```shell
 brew install j178/tap/chatgpt
 ```
+### Install via [Nix](https://search.nixos.org/packages) on macOS/Linux
+
+```nix
+environment.systemPackages = [
+  pkgs.chatgpt-cli
+];
+```
 
 ### Install via [Scoop](https://scoop.sh/) on Windows
 
