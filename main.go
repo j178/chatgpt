@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -598,6 +599,7 @@ type model struct {
 	viewport      viewport.Model
 	textarea      textarea.Model
 	help          help.Model
+	spin          spinner.Model
 	spinning      bool
 	inputMode     InputMode
 	err           error
@@ -628,6 +630,7 @@ func initialModel(chatgpt *ChatGPT, conversations *ConversationManager) model {
 	ta.ShowLineNumbers = false
 
 	vp := viewport.New(50, 5)
+	spin := spinner.New(spinner.WithSpinner(spinner.Points))
 	renderer, _ := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
 		glamour.WithWordWrap(0), // we do hard-wrapping ourselves
@@ -638,6 +641,7 @@ func initialModel(chatgpt *ChatGPT, conversations *ConversationManager) model {
 		textarea:      ta,
 		viewport:      vp,
 		help:          help.New(),
+		spin:          spin,
 		chatgpt:       chatgpt,
 		conversations: conversations,
 		keymap:        keymap,
@@ -687,6 +691,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.SetWidth(msg.Width)
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
+	case spinner.TickMsg:
+		if m.spinning {
+			m.spin, cmd = m.spin.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keymap.ShowHelp, m.keymap.HideHelp):
@@ -705,6 +714,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(
 				cmds,
 				m.chatgpt.send(m.conversations.Curr().Config, m.conversations.Curr().GetContextMessages()),
+			)
+			// Start answer spinner
+			m.spinning = true
+			cmds = append(
+				cmds, func() tea.Msg {
+					return m.spin.Tick()
+				},
 			)
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
@@ -811,6 +827,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoBottom()
 	case answerMsg:
 		m.conversations.Curr().UpdatePending(string(msg), true)
+		m.spinning = false
 		m.chatgpt.done()
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
@@ -828,8 +845,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.err = msg
 		}
+		m.spinning = false
 		m.conversations.Curr().UpdatePending("", true)
 		m.chatgpt.done()
+		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
+		m.viewport.GotoBottom()
 		m.textarea.Placeholder = "Send a message..."
 		m.textarea.Focus()
 	}
@@ -864,7 +884,7 @@ func (m model) RenderConversation(maxWidth int) string {
 		sb.WriteString(ensureTrailingNewline(content))
 	}
 	renderBot := func(content string) {
-		if content == "" {
+		if content == "" && !m.spinning {
 			return
 		}
 		sb.WriteString(botStyle.Render("ChatGPT: "))
@@ -903,7 +923,9 @@ func (m model) RenderFooter() string {
 	// spinner
 	var columns []string
 	if m.spinning {
-		columns = append(columns, "\\")
+		columns = append(columns, m.spin.View())
+	} else {
+		columns = append(columns, m.spin.Spinner.Frames[0])
 	}
 
 	// conversation indicator
