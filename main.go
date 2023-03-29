@@ -909,18 +909,13 @@ func (m model) statusLine() string {
 	)
 }
 
-func (m model) helpLine() string {
-	helpLine := m.help.View(m.keymap)
-	return lipgloss.NewStyle().Render(helpLine)
-}
-
 func (m model) View() string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.viewport.View(),
 		m.textarea.View(),
 		m.statusLine(),
-		m.helpLine(),
+		m.help.View(m.keymap),
 	)
 }
 
