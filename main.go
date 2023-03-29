@@ -603,24 +603,12 @@ type model struct {
 	renderer      *glamour.TermRenderer
 }
 
-func generatePromptFunc(conversation *Conversation) (int, func(lineIdx int) string) {
-	promptPrefix := conversation.Config.Prompt
-	promptSuffix := " ┃ "
-	return len(promptPrefix) + len(promptSuffix), func(lineIdx int) string {
-		// Key of prompt should be displayed only in the first line.
-		if lineIdx != 0 {
-			promptPrefix = strings.Repeat(" ", len(promptPrefix))
-		}
-		return fmt.Sprintf("%s%s", promptPrefix, promptSuffix)
-	}
-}
-
 func initialModel(chatgpt *ChatGPT, conversations *ConversationManager) model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message..."
 	ta.Focus()
 
-	ta.SetPromptFunc(generatePromptFunc(conversations.Curr()))
+	ta.Prompt = "┃ "
 	ta.CharLimit = -1
 	if debug {
 		ta.Cursor.SetMode(cursor.CursorStatic)
@@ -688,7 +676,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.help.Width = msg.Width
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(m.bottomLine())
+		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(m.statusLine()) - lipgloss.Height(m.helpLine())
 		m.textarea.SetWidth(msg.Width)
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
@@ -696,7 +684,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keymap.ShowHelp, m.keymap.HideHelp):
 			m.help.ShowAll = !m.help.ShowAll
-			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.bottomLine())
+			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.statusLine()) - lipgloss.Height(m.helpLine())
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		case key.Matches(msg, m.keymap.Submit):
 			if m.chatgpt.answering {
@@ -839,7 +827,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.Focus()
 	}
 
-	m.textarea.SetPromptFunc(generatePromptFunc(m.conversations.Curr()))
 	return m, tea.Batch(cmds...)
 }
 
@@ -893,25 +880,24 @@ func (m model) RenderConversation(maxWidth int) string {
 	return sb.String()
 }
 
-func (m model) bottomLine() string {
-	var bottomLine string
+func (m model) statusLine() string {
+	var statusLine string
 	if m.err != nil {
-		bottomLine = errorStyle.Render(fmt.Sprintf("error: %v", m.err))
-	}
-	if bottomLine == "" {
-		bottomLine = m.help.View(m.keymap)
+		statusLine = errorStyle.Render(fmt.Sprintf("error: %v", m.err))
 	}
 	var conversationIndicator string
 	if m.conversations.Len() > 1 {
 		conversationIdx := m.conversations.Idx
-		conversationIndicator = fmt.Sprintf("(%d/%d) ", conversationIdx+1, m.conversations.Len())
+		conversationIndicator = fmt.Sprintf("(%d/%d)", conversationIdx+1, m.conversations.Len())
 	}
-	if m.help.ShowAll {
-		conversationIndicator = ""
-	}
+	prompt := m.conversations.Curr().Config.Prompt
+	statusLine = fmt.Sprintf("%s %s %s", conversationIndicator, prompt, statusLine)
+	return lipgloss.NewStyle().PaddingTop(1).Render(statusLine)
+}
 
-	bottomLine = conversationIndicator + bottomLine
-	return lipgloss.NewStyle().PaddingTop(1).Render(bottomLine)
+func (m model) helpLine() string {
+	helpLine := m.help.View(m.keymap)
+	return lipgloss.NewStyle().PaddingTop(1).Render(helpLine)
 }
 
 func (m model) View() string {
@@ -919,7 +905,8 @@ func (m model) View() string {
 		lipgloss.Left,
 		m.viewport.View(),
 		m.textarea.View(),
-		m.bottomLine(),
+		m.statusLine(),
+		m.helpLine(),
 	)
 }
 
