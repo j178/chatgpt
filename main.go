@@ -603,12 +603,24 @@ type model struct {
 	renderer      *glamour.TermRenderer
 }
 
+func generatePromptFunc(conversation *Conversation) (int, func(lineIdx int) string) {
+	promptPrefix := conversation.Config.Prompt
+	promptSuffix := " ┃ "
+	return len(promptPrefix) + len(promptSuffix), func(lineIdx int) string {
+		// Key of prompt should be displayed only in the first line.
+		if lineIdx != 0 {
+			promptPrefix = strings.Repeat(" ", len(promptPrefix))
+		}
+		return fmt.Sprintf("%s%s", promptPrefix, promptSuffix)
+	}
+}
+
 func initialModel(chatgpt *ChatGPT, conversations *ConversationManager) model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message..."
 	ta.Focus()
 
-	ta.Prompt = "┃ "
+	ta.SetPromptFunc(generatePromptFunc(conversations.Curr()))
 	ta.CharLimit = -1
 	if debug {
 		ta.Cursor.SetMode(cursor.CursorStatic)
@@ -827,6 +839,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.Focus()
 	}
 
+	m.textarea.SetPromptFunc(generatePromptFunc(m.conversations.Curr()))
 	return m, tea.Batch(cmds...)
 }
 

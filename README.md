@@ -14,6 +14,9 @@ export OPENAI_API_KEY=xxx
 # Continuous chat mode
 chatgpt
 
+# Create a new chat, specifying the prompt
+chatgpt -n -p translator
+
 # One-time chat mode, easily integrate with other tools
 cat config.yaml | chatgpt -p 'convert this yaml to json'
 echo "Hello, world" | chatgpt -p translator | say
