@@ -676,7 +676,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.help.Width = msg.Width
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(m.statusLine()) - lipgloss.Height(m.helpLine())
+		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(m.statusLine()) - lipgloss.Height(m.help.View(m.keymap))
 		m.textarea.SetWidth(msg.Width)
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
@@ -684,7 +684,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keymap.ShowHelp, m.keymap.HideHelp):
 			m.help.ShowAll = !m.help.ShowAll
-			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.statusLine()) - lipgloss.Height(m.helpLine())
+			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.statusLine()) - lipgloss.Height(m.help.View(m.keymap))
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		case key.Matches(msg, m.keymap.Submit):
 			if m.chatgpt.answering {
