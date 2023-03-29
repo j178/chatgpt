@@ -881,9 +881,9 @@ func (m model) RenderConversation(maxWidth int) string {
 }
 
 func (m model) statusLine() string {
-	var statusLine string
+	var statusValStr string
 	if m.err != nil {
-		statusLine = errorStyle.Render(fmt.Sprintf("error: %v", m.err))
+		statusValStr = errorStyle.Render(fmt.Sprintf("error: %v", m.err))
 	}
 	var conversationIndicator string
 	if m.conversations.Len() > 1 {
@@ -891,13 +891,27 @@ func (m model) statusLine() string {
 		conversationIndicator = fmt.Sprintf("(%d/%d)", conversationIdx+1, m.conversations.Len())
 	}
 	prompt := m.conversations.Curr().Config.Prompt
-	statusLine = fmt.Sprintf("%s %s %s", conversationIndicator, prompt, statusLine)
-	return lipgloss.NewStyle().PaddingTop(1).Render(statusLine)
+	statusKeyStr := fmt.Sprintf("%s %s", conversationIndicator, prompt)
+	style := lipgloss.NewStyle().MarginTop(1).Padding(0, 1)
+	statusKey := style.Copy().
+		Foreground(lipgloss.Color("231")).
+		Background(lipgloss.Color("17")).
+		Render(statusKeyStr)
+	statusVal := style.Copy().
+		Foreground(lipgloss.Color("231")).
+		Background(lipgloss.Color("242")).
+		Width(m.width - lipgloss.Width(statusKey)).
+		Render(statusValStr)
+	return lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		statusKey,
+		statusVal,
+	)
 }
 
 func (m model) helpLine() string {
 	helpLine := m.help.View(m.keymap)
-	return lipgloss.NewStyle().PaddingTop(1).Render(helpLine)
+	return lipgloss.NewStyle().Render(helpLine)
 }
 
 func (m model) View() string {
