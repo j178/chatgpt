@@ -891,7 +891,12 @@ func (m model) statusLine() string {
 		conversationIndicator = fmt.Sprintf("(%d/%d)", conversationIdx+1, m.conversations.Len())
 	}
 	prompt := m.conversations.Curr().Config.Prompt
+	maxStatusKeyStrLen := 25
 	statusKeyStr := fmt.Sprintf("%s %s", conversationIndicator, prompt)
+	if len(statusKeyStr) > maxStatusKeyStrLen {
+		statusKeyStr = statusKeyStr[:maxStatusKeyStrLen-3] + "..."
+	}
+	statusKeyStr = statusKeyStr + strings.Repeat(" ", maxStatusKeyStrLen-len(statusKeyStr))
 	style := lipgloss.NewStyle().MarginTop(1).Padding(0, 1)
 	statusKey := style.Copy().
 		Foreground(lipgloss.Color("231")).
