@@ -676,7 +676,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.help.Width = msg.Width
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(m.bottomLine())
+		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(m.statusLine()) - lipgloss.Height(m.help.View(m.keymap))
 		m.textarea.SetWidth(msg.Width)
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
@@ -684,7 +684,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keymap.ShowHelp, m.keymap.HideHelp):
 			m.help.ShowAll = !m.help.ShowAll
-			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.bottomLine())
+			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.statusLine()) - lipgloss.Height(m.help.View(m.keymap))
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		case key.Matches(msg, m.keymap.Submit):
 			if m.chatgpt.answering {
@@ -880,25 +880,38 @@ func (m model) RenderConversation(maxWidth int) string {
 	return sb.String()
 }
 
-func (m model) bottomLine() string {
-	var bottomLine string
+func (m model) statusLine() string {
+	var statusValStr string
 	if m.err != nil {
-		bottomLine = errorStyle.Render(fmt.Sprintf("error: %v", m.err))
-	}
-	if bottomLine == "" {
-		bottomLine = m.help.View(m.keymap)
+		statusValStr = errorStyle.Render(fmt.Sprintf("error: %v", m.err))
 	}
 	var conversationIndicator string
 	if m.conversations.Len() > 1 {
 		conversationIdx := m.conversations.Idx
-		conversationIndicator = fmt.Sprintf("(%d/%d) ", conversationIdx+1, m.conversations.Len())
+		conversationIndicator = fmt.Sprintf("(%d/%d)", conversationIdx+1, m.conversations.Len())
 	}
-	if m.help.ShowAll {
-		conversationIndicator = ""
+	prompt := m.conversations.Curr().Config.Prompt
+	maxStatusKeyStrLen := 25
+	statusKeyStr := fmt.Sprintf("%s %s", conversationIndicator, prompt)
+	if len(statusKeyStr) > maxStatusKeyStrLen {
+		statusKeyStr = statusKeyStr[:maxStatusKeyStrLen-3] + "..."
 	}
-
-	bottomLine = conversationIndicator + bottomLine
-	return lipgloss.NewStyle().PaddingTop(1).Render(bottomLine)
+	statusKeyStr = statusKeyStr + strings.Repeat(" ", maxStatusKeyStrLen-len(statusKeyStr))
+	style := lipgloss.NewStyle().MarginTop(1).Padding(0, 1)
+	statusKey := style.Copy().
+		Foreground(lipgloss.Color("231")).
+		Background(lipgloss.Color("17")).
+		Render(statusKeyStr)
+	statusVal := style.Copy().
+		Foreground(lipgloss.Color("231")).
+		Background(lipgloss.Color("242")).
+		Width(m.width - lipgloss.Width(statusKey)).
+		Render(statusValStr)
+	return lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		statusKey,
+		statusVal,
+	)
 }
 
 func (m model) View() string {
@@ -906,7 +919,8 @@ func (m model) View() string {
 		lipgloss.Left,
 		m.viewport.View(),
 		m.textarea.View(),
-		m.bottomLine(),
+		m.statusLine(),
+		m.help.View(m.keymap),
 	)
 }
 
