@@ -25,12 +25,12 @@ type keyMap struct {
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.ShowHelp, k.Submit, k.Quit}
+	return []key.Binding{k.ShowHelp}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.HideHelp, k.Submit, k.Quit, k.SwitchMultiline, k.Copy},
+		{k.Submit, k.Quit, k.SwitchMultiline, k.Copy, k.TextAreaKeys.Paste},
 		{k.NewConversation, k.PrevConversation, k.NextConversation, k.ForgetContext, k.RemoveConversation},
 		{
 			k.PrevHistory,
@@ -103,7 +103,7 @@ func defaultKeyMap() keyMap {
 			DeleteCharacterForward:  key.NewBinding(key.WithKeys("delete")),
 			LineStart:               key.NewBinding(key.WithKeys("home", "ctrl+a")),
 			LineEnd:                 key.NewBinding(key.WithKeys("end", "ctrl+e")),
-			Paste:                   key.NewBinding(key.WithKeys("ctrl+v", "alt+v")),
+			Paste:                   key.NewBinding(key.WithKeys("ctrl+v", "alt+v"), key.WithHelp("ctrl+v", "paste")),
 			InputBegin:              key.NewBinding(key.WithKeys("alt+<", "ctrl+home")),
 			InputEnd:                key.NewBinding(key.WithKeys("alt+>", "ctrl+end")),
 

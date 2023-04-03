@@ -31,12 +31,8 @@ import (
 	"github.com/muesli/reflow/wrap"
 	"github.com/postfinance/single"
 	"github.com/sashabaranov/go-openai"
-)
 
-var (
-	senderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
-	botStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
-	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true)
+	"github.com/j178/chatgpt/tokenizer"
 )
 
 var (
@@ -61,6 +57,7 @@ type (
 // TODO support switch prompt in TUI
 
 func main() {
+	log.SetFlags(0)
 	flag.Parse()
 	if *showVersion {
 		fmt.Print(buildVersion())
@@ -601,6 +598,7 @@ type model struct {
 	viewport      viewport.Model
 	textarea      textarea.Model
 	help          help.Model
+	spinning      bool
 	inputMode     InputMode
 	err           error
 	chatgpt       *ChatGPT
@@ -685,7 +683,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.help.Width = msg.Width
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(m.statusLine()) - lipgloss.Height(m.help.View(m.keymap))
+		m.viewport.Height = msg.Height - m.textarea.Height() - lipgloss.Height(m.RenderFooter())
 		m.textarea.SetWidth(msg.Width)
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
@@ -693,7 +691,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keymap.ShowHelp, m.keymap.HideHelp):
 			m.help.ShowAll = !m.help.ShowAll
-			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.statusLine()) - lipgloss.Height(m.help.View(m.keymap))
+			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.RenderFooter())
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		case key.Matches(msg, m.keymap.Submit):
 			if m.chatgpt.answering {
@@ -839,6 +837,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+var (
+	senderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
+	botStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true)
+	footerStyle = lipgloss.NewStyle().Height(1).BorderTop(true).
+		BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")).Faint(true)
+)
+
 func (m model) RenderConversation(maxWidth int) string {
 	var sb strings.Builder
 	c := m.conversations.Curr()
@@ -889,47 +895,76 @@ func (m model) RenderConversation(maxWidth int) string {
 	return sb.String()
 }
 
-func (m model) statusLine() string {
-	var statusValStr string
+func (m model) RenderFooter() string {
 	if m.err != nil {
-		statusValStr = errorStyle.Render(fmt.Sprintf("error: %v", m.err))
+		return errorStyle.Render(fmt.Sprintf("error: %v", m.err))
 	}
-	var conversationIndicator string
+
+	// spinner
+	var columns []string
+	if m.spinning {
+		columns = append(columns, "\\")
+	}
+
+	// conversation indicator
 	if m.conversations.Len() > 1 {
-		conversationIdx := m.conversations.Idx
-		conversationIndicator = fmt.Sprintf("(%d/%d)", conversationIdx+1, m.conversations.Len())
+		conversationIdx := fmt.Sprintf("\ueac7 %d/%d", m.conversations.Idx+1, m.conversations.Len())
+		columns = append(columns, conversationIdx)
 	}
+
+	// token count
+	messages := m.conversations.Curr().GetContextMessages()
+	question := m.textarea.Value()
+	if len(messages) > 0 || len(question) > 0 {
+		messages = append(
+			messages, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleUser,
+				Content: question,
+			},
+		)
+		tokens := tokenizer.CountMessagesTokens(m.conversations.Curr().Config.Model, messages)
+		columns = append(columns, fmt.Sprintf("\U000F0C24 %d", tokens))
+	}
+
+	// help
+	columns = append(columns, "\U000F02D6 ctrl+h")
+
+	// prompt
 	prompt := m.conversations.Curr().Config.Prompt
-	maxStatusKeyStrLen := 25
-	statusKeyStr := fmt.Sprintf("%s %s", conversationIndicator, prompt)
-	if len(statusKeyStr) > maxStatusKeyStrLen {
-		statusKeyStr = statusKeyStr[:maxStatusKeyStrLen-3] + "..."
+	prompt = fmt.Sprintf(" \ueb33 %s", prompt)
+	columns = append(columns, prompt)
+
+	totalWidth := lipgloss.Width(strings.Join(columns, ""))
+	padding := (m.width - totalWidth) / (len(columns) - 1)
+
+	if totalWidth+(len(columns)-1)*padding > m.width {
+		remainingSpace := m.width - (lipgloss.Width(
+			strings.Join(
+				columns[:len(columns)-1],
+				"",
+			),
+		) + (len(columns)-2)*padding + 3)
+		columns[len(columns)-1] = columns[len(columns)-1][:remainingSpace] + "..."
 	}
-	statusKeyStr = statusKeyStr + strings.Repeat(" ", maxStatusKeyStrLen-len(statusKeyStr))
-	style := lipgloss.NewStyle().MarginTop(1).Padding(0, 1)
-	statusKey := style.Copy().
-		Foreground(lipgloss.Color("231")).
-		Background(lipgloss.Color("17")).
-		Render(statusKeyStr)
-	statusVal := style.Copy().
-		Foreground(lipgloss.Color("231")).
-		Background(lipgloss.Color("242")).
-		Width(m.width - lipgloss.Width(statusKey)).
-		Render(statusValStr)
-	return lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		statusKey,
-		statusVal,
-	)
+
+	footer := strings.Join(columns, strings.Repeat(" ", padding))
+	footer = footerStyle.Width(m.width).Render(footer)
+	if m.help.ShowAll {
+		return m.help.View(m.keymap) + "\n" + footer
+	}
+	return footer
 }
 
 func (m model) View() string {
+	if m.width == 0 || m.height == 0 {
+		return "Initializing..."
+	}
+
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.viewport.View(),
 		m.textarea.View(),
-		m.statusLine(),
-		m.help.View(m.keymap),
+		m.RenderFooter(),
 	)
 }
 
