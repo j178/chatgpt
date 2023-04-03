@@ -124,7 +124,7 @@ func main() {
 		initialModel(chatgpt, conversations),
 		// enable mouse motion will make text not able to select
 		// tea.WithMouseCellMotion(),
-		// tea.WithAltScreen(),
+		tea.WithAltScreen(),
 	)
 	if debug {
 		f, _ := tea.LogToFile("chatgpt.log", "")
@@ -667,7 +667,7 @@ func savePeriodically() tea.Cmd {
 }
 
 func (m model) Init() tea.Cmd {
-	var cmds []tea.Cmd
+	cmds := []tea.Cmd{tea.EnterAltScreen}
 	if !debug { // disable blink when debug
 		cmds = append(cmds, textarea.Blink)
 	}
@@ -787,12 +787,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				UseMultiLineInputMode(&m)
 				m.textarea.ShowLineNumbers = true
 				m.textarea.SetHeight(2)
-				m.viewport.Height--
+				m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.RenderFooter())
 			} else {
 				UseSingleLineInputMode(&m)
 				m.textarea.ShowLineNumbers = false
 				m.textarea.SetHeight(1)
-				m.viewport.Height++
+				m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.RenderFooter())
 			}
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		case key.Matches(msg, m.keymap.Copy):
@@ -872,7 +872,7 @@ var (
 	botStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
 	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true)
 	footerStyle = lipgloss.NewStyle().Height(1).BorderTop(true).
-		BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")).Faint(true)
+			BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")).Faint(true)
 )
 
 func (m model) RenderConversation(maxWidth int) string {
@@ -927,7 +927,7 @@ func (m model) RenderConversation(maxWidth int) string {
 
 func (m model) RenderFooter() string {
 	if m.err != nil {
-		return footerStyle.Copy().Render(errorStyle.Render(fmt.Sprintf("error: %v", m.err)))
+		return footerStyle.Render(errorStyle.Render(fmt.Sprintf("error: %v", m.err)))
 	}
 
 	// spinner
@@ -940,7 +940,7 @@ func (m model) RenderFooter() string {
 
 	// conversation indicator
 	if m.conversations.Len() > 1 {
-		conversationIdx := fmt.Sprintf("\ueac7 %d/%d", m.conversations.Idx+1, m.conversations.Len())
+		conversationIdx := fmt.Sprintf("%s %d/%d", ConversationIcon, m.conversations.Idx+1, m.conversations.Len())
 		columns = append(columns, conversationIdx)
 	}
 
@@ -957,15 +957,15 @@ func (m model) RenderFooter() string {
 			}
 			tokens += tokenizer.CountMessagesTokens(m.conversations.Curr().Config.Model, messages)
 		}
-		columns = append(columns, fmt.Sprintf("\U000F0C24 %d", tokens))
+		columns = append(columns, fmt.Sprintf("%s %d", TokenIcon, tokens))
 	}
 
 	// help
-	columns = append(columns, "\U000F02D6 ctrl+h")
+	columns = append(columns, fmt.Sprintf("%s ctrl+h", HelpIcon))
 
 	// prompt
 	prompt := m.conversations.Curr().Config.Prompt
-	prompt = fmt.Sprintf(" \ueb33 %s", prompt)
+	prompt = fmt.Sprintf("%s %s", PromptIcon, prompt)
 	columns = append(columns, prompt)
 
 	totalWidth := lipgloss.Width(strings.Join(columns, ""))
@@ -982,7 +982,7 @@ func (m model) RenderFooter() string {
 	}
 
 	footer := strings.Join(columns, strings.Repeat(" ", padding))
-	footer = footerStyle.Copy().Width(m.width).Render(footer)
+	footer = footerStyle.Render(footer)
 	if m.help.ShowAll {
 		return "\n" + m.help.View(m.keymap) + "\n" + footer
 	}
