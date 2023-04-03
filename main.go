@@ -884,7 +884,7 @@ func (m model) RenderConversation(maxWidth int) string {
 		sb.WriteString(ensureTrailingNewline(content))
 	}
 	renderBot := func(content string) {
-		if content == "" && !m.spinning {
+		if content == "" {
 			return
 		}
 		sb.WriteString(botStyle.Render("ChatGPT: "))
