@@ -11,10 +11,10 @@ Get or create your OpenAI API Key from here: https://platform.openai.com/account
 ```shell
 export OPENAI_API_KEY=xxx
 
-# Continuous chat mode
+# Chat mode
 chatgpt
 
-# Create a new chat, specifying the prompt
+# Create a new chat and provide a prompt
 chatgpt -n -p translator
 
 # One-time chat mode, easily integrate with other tools
@@ -39,7 +39,7 @@ brew install j178/tap/chatgpt
 ```
 ### Install via [Nix](https://search.nixos.org/packages) on macOS/Linux
 
-```nix
+```
 environment.systemPackages = [
   pkgs.chatgpt-cli
 ];
@@ -140,6 +140,10 @@ then use `-p` flag to switch prompt:
 ```shell
 chatgpt -p translator
 ```
+
+> **Note**
+> The prompt can be a predefined prompt, or come up with one on the fly.
+> e.g. `chatgpt -p translator` or `chatgpt -p "You are a cat. You can only meow. That's it."`
 
 ### Custom endpoint
 If you cannot access to the default `https://api.openai.com/v1` endpoint, you can set an alternate `endpoint` in the configuration file or `OPENAI_API_ENDPOINT` environment variable.
