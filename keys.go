@@ -103,7 +103,7 @@ func defaultKeyMap() keyMap {
 			DeleteCharacterForward:  key.NewBinding(key.WithKeys("delete")),
 			LineStart:               key.NewBinding(key.WithKeys("home", "ctrl+a")),
 			LineEnd:                 key.NewBinding(key.WithKeys("end", "ctrl+e")),
-			Paste:                   key.NewBinding(key.WithKeys("alt+v")),
+			Paste:                   key.NewBinding(key.WithKeys("ctrl+v", "alt+v")),
 			InputBegin:              key.NewBinding(key.WithKeys("alt+<", "ctrl+home")),
 			InputEnd:                key.NewBinding(key.WithKeys("alt+>", "ctrl+end")),
 
