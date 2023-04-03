@@ -77,17 +77,26 @@ func main() {
 
 	chatgpt := newChatGPT(conf)
 	// One-time ask-and-response mode
-	if !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd()) {
-		question, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			exit(err)
+	args := flag.Args()
+	pipeIn := !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd())
+	if pipeIn || len(args) > 0 {
+		var question string
+		if pipeIn {
+			data, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				exit(err)
+			}
+			question = string(data)
+		} else {
+			question = strings.Join(args, " ")
 		}
+
 		conversationConf := conf.Conversation
-		answer, err := chatgpt.ask(conversationConf, string(question))
+		answer, err := chatgpt.ask(conversationConf, question)
 		if err != nil {
 			exit(err)
 		}
-		fmt.Print(answer)
+		fmt.Println(answer)
 		return
 	}
 
