@@ -936,13 +936,13 @@ func (m model) RenderFooter() string {
 
 	totalWidth := lipgloss.Width(strings.Join(columns, ""))
 	padding := (m.width - totalWidth) / (len(columns) - 1)
+	if padding < 0 {
+		padding = 2
+	}
 
 	if totalWidth+(len(columns)-1)*padding > m.width {
 		remainingSpace := m.width - (lipgloss.Width(
-			strings.Join(
-				columns[:len(columns)-1],
-				"",
-			),
+			strings.Join(columns[:len(columns)-1], ""),
 		) + (len(columns)-2)*padding + 3)
 		columns[len(columns)-1] = columns[len(columns)-1][:remainingSpace] + "..."
 	}
@@ -950,7 +950,7 @@ func (m model) RenderFooter() string {
 	footer := strings.Join(columns, strings.Repeat(" ", padding))
 	footer = footerStyle.Width(m.width).Render(footer)
 	if m.help.ShowAll {
-		return m.help.View(m.keymap) + "\n" + footer
+		return "\n" + m.help.View(m.keymap) + "\n" + footer
 	}
 	return footer
 }
