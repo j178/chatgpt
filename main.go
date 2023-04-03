@@ -844,7 +844,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.Placeholder = "Send a message..."
 		m.textarea.Focus()
 	case saveMsg:
-		m.err = m.conversations.Dump()
+		_ = m.conversations.Dump()
 		cmds = append(cmds, savePeriodically())
 	case errMsg:
 		// Network problem or answer completed, can't tell
@@ -927,7 +927,7 @@ func (m model) RenderConversation(maxWidth int) string {
 
 func (m model) RenderFooter() string {
 	if m.err != nil {
-		return errorStyle.Render(fmt.Sprintf("error: %v", m.err))
+		return footerStyle.Copy().Render(errorStyle.Render(fmt.Sprintf("error: %v", m.err)))
 	}
 
 	// spinner
@@ -947,14 +947,16 @@ func (m model) RenderFooter() string {
 	// token count
 	question := m.textarea.Value()
 	if m.conversations.Curr().Len() > 0 || len(question) > 0 {
-		messages := []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: question,
-			},
-		}
 		tokens := m.conversations.Curr().GetContextTokens()
-		tokens += tokenizer.CountMessagesTokens(m.conversations.Curr().Config.Model, messages)
+		if len(question) > 0 {
+			messages := []openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleUser,
+					Content: question,
+				},
+			}
+			tokens += tokenizer.CountMessagesTokens(m.conversations.Curr().Config.Model, messages)
+		}
 		columns = append(columns, fmt.Sprintf("\U000F0C24 %d", tokens))
 	}
 
@@ -980,7 +982,7 @@ func (m model) RenderFooter() string {
 	}
 
 	footer := strings.Join(columns, strings.Repeat(" ", padding))
-	footer = footerStyle.Width(m.width).Render(footer)
+	footer = footerStyle.Copy().Width(m.width).Render(footer)
 	if m.help.ShowAll {
 		return "\n" + m.help.View(m.keymap) + "\n" + footer
 	}

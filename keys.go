@@ -60,11 +60,11 @@ func defaultKeyMap() keyMap {
 			key.WithHelp("ctrl+r", "remove current conversation"),
 		),
 		PrevConversation: key.NewBinding(
-			key.WithKeys("ctrl+left"),
+			key.WithKeys("ctrl+left", "ctrl+g"),
 			key.WithHelp("ctrl+left", "previous conversation"),
 		),
 		NextConversation: key.NewBinding(
-			key.WithKeys("ctrl+right"),
+			key.WithKeys("ctrl+right", "ctrl+o"),
 			key.WithHelp("ctrl+right", "next conversation"),
 		),
 		ViewPortKeys: viewport.KeyMap{
