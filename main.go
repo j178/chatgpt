@@ -388,11 +388,12 @@ type QnA struct {
 }
 
 type Conversation struct {
-	manager   *ConversationManager
-	Config    ConversationConfig `json:"config"`
-	Forgotten []QnA              `json:"forgotten,omitempty"`
-	Context   []QnA              `json:"context,omitempty"`
-	Pending   *QnA               `json:"pending,omitempty"`
+	manager       *ConversationManager
+	contextTokens int
+	Config        ConversationConfig `json:"config"`
+	Forgotten     []QnA              `json:"forgotten,omitempty"`
+	Context       []QnA              `json:"context,omitempty"`
+	Pending       *QnA               `json:"pending,omitempty"`
 }
 
 func (c *Conversation) AddQuestion(q string) {
@@ -406,6 +407,7 @@ func (c *Conversation) UpdatePending(ans string, done bool) {
 	c.Pending.Answer += ans
 	if done {
 		c.Context = append(c.Context, *c.Pending)
+		c.contextTokens = 0
 		if len(c.Context) > c.Config.ContextLength {
 			c.Forgotten = append(c.Forgotten, c.Context[0])
 			c.Context = c.Context[1:]
@@ -447,9 +449,17 @@ func (c *Conversation) GetContextMessages() []openai.ChatCompletionMessage {
 	return messages
 }
 
+func (c *Conversation) GetContextTokens() int {
+	if c.contextTokens == 0 {
+		c.contextTokens = tokenizer.CountMessagesTokens(c.Config.Model, c.GetContextMessages())
+	}
+	return c.contextTokens
+}
+
 func (c *Conversation) ForgetContext() {
 	c.Forgotten = append(c.Forgotten, c.Context...)
 	c.Context = nil
+	c.contextTokens = 0
 }
 
 func (c *Conversation) PendingAnswer() string {
@@ -935,16 +945,16 @@ func (m model) RenderFooter() string {
 	}
 
 	// token count
-	messages := m.conversations.Curr().GetContextMessages()
 	question := m.textarea.Value()
-	if len(messages) > 0 || len(question) > 0 {
-		messages = append(
-			messages, openai.ChatCompletionMessage{
+	if m.conversations.Curr().Len() > 0 || len(question) > 0 {
+		messages := []openai.ChatCompletionMessage{
+			{
 				Role:    openai.ChatMessageRoleUser,
 				Content: question,
 			},
-		)
-		tokens := tokenizer.CountMessagesTokens(m.conversations.Curr().Config.Model, messages)
+		}
+		tokens := m.conversations.Curr().GetContextTokens()
+		tokens += tokenizer.CountMessagesTokens(m.conversations.Curr().Config.Model, messages)
 		columns = append(columns, fmt.Sprintf("\U000F0C24 %d", tokens))
 	}
 
