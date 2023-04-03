@@ -2,7 +2,7 @@
 
 A TUI for ChatGPT API, powered by GPT-3.5-turbo and GPT-4 models.
 
-![chatgpt-1 0](https://user-images.githubusercontent.com/10510431/229557763-9acb3f08-90e1-4fbe-af72-6c7156f7d318.gif)
+![chatgpt-1 0](https://user-images.githubusercontent.com/10510431/229564407-e4c0b6bf-adfb-40f0-a63c-840dafbc1291.gif)
 
 
 ## Usage
