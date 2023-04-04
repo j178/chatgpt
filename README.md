@@ -4,7 +4,6 @@ A TUI for ChatGPT API, powered by GPT-3.5-turbo and GPT-4 models.
 
 ![chatgpt-1 0](https://user-images.githubusercontent.com/10510431/229564407-e4c0b6bf-adfb-40f0-a63c-840dafbc1291.gif)
 
-
 ## Usage
 
 Get or create your OpenAI API Key from here: https://platform.openai.com/account/api-keys
@@ -38,6 +37,7 @@ go install github.com/j178/chatgpt@latest
 ```shell
 brew install j178/tap/chatgpt
 ```
+
 ### Install via [Nix](https://search.nixos.org/packages) on macOS/Linux
 
 ```
@@ -146,9 +146,14 @@ chatgpt -p translator
 > The prompt can be a predefined prompt, or come up with one on the fly.
 > e.g. `chatgpt -p translator` or `chatgpt -p "You are a cat. You can only meow. That's it."`
 
-### Custom endpoint
-If you cannot access to the default `https://api.openai.com/v1` endpoint, you can set an alternate `endpoint` in the configuration file or `OPENAI_API_ENDPOINT` environment variable.
-Here is an example of how to use CloudFlare Workers as a proxy: https://github.com/noobnooc/noobnooc/discussions/9
+## Troubleshooting
+
+1. `Error: unexpected EOF, please try again`
+
+    In most cases, this is usually an invalid API key or being banned from OpenAI. To check for any error messages, please execute `echo hello | chatgpt`.
+
+    If you cannot access to the default `https://api.openai.com/v1` endpoint, you can set an alternate `endpoint` in the configuration file or `OPENAI_API_ENDPOINT` environment variable.
+    Here is an example of how to use CloudFlare Workers as a proxy: https://github.com/noobnooc/noobnooc/discussions/9
 
 ## License
 

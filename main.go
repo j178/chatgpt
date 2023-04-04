@@ -398,6 +398,7 @@ type Conversation struct {
 
 func (c *Conversation) AddQuestion(q string) {
 	c.Pending = &QnA{Question: q}
+	c.contextTokens = 0
 }
 
 func (c *Conversation) UpdatePending(ans string, done bool) {
