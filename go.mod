@@ -8,18 +8,19 @@ require (
 	github.com/charmbracelet/bubbles v0.15.0
 	github.com/charmbracelet/bubbletea v0.23.2
 	github.com/charmbracelet/glamour v0.6.0
-	github.com/charmbracelet/lipgloss v0.6.0
-	github.com/mattn/go-isatty v0.0.17
+	github.com/charmbracelet/lipgloss v0.7.1
+	github.com/mattn/go-isatty v0.0.18
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/muesli/reflow v0.3.0
-	github.com/pkoukk/tiktoken-go v0.0.0-20230324104152-12d08d8436f6
+	github.com/pkoukk/tiktoken-go v0.1.0
 	github.com/postfinance/single v0.0.2
-	github.com/sashabaranov/go-openai v1.5.3
+	github.com/sashabaranov/go-openai v1.5.8
 )
 
 require (
 	github.com/alecthomas/chroma v0.10.0 // indirect
 	github.com/aymanbagabas/go-osc52 v1.2.2 // indirect
+	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
 	github.com/dlclark/regexp2 v1.8.1 // indirect
@@ -28,10 +29,10 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
-	github.com/microcosm-cc/bluemonday v1.0.22 // indirect
-	github.com/muesli/ansi v0.0.0-20221106050444-61f0cd9a192a // indirect
+	github.com/microcosm-cc/bluemonday v1.0.23 // indirect
+	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/muesli/termenv v0.14.0 // indirect
+	github.com/muesli/termenv v0.15.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/yuin/goldmark v1.5.4 // indirect

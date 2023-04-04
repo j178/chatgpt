@@ -950,13 +950,7 @@ func (m model) RenderFooter() string {
 	if m.conversations.Curr().Len() > 0 || len(question) > 0 {
 		tokens := m.conversations.Curr().GetContextTokens()
 		if len(question) > 0 {
-			messages := []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: question,
-				},
-			}
-			tokens += tokenizer.CountMessagesTokens(m.conversations.Curr().Config.Model, messages)
+			tokens += tokenizer.CountTokens(m.conversations.Curr().Config.Model, question) + 5
 		}
 		columns = append(columns, fmt.Sprintf("%s %d", TokenIcon, tokens))
 	}
