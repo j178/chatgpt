@@ -294,11 +294,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 var (
-	senderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
-	botStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
-	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true)
-	footerStyle = lipgloss.NewStyle().Height(1).BorderTop(true).
-			BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")).Faint(true)
+	senderStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5"))
+	botStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
+	errorStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1"))
+	footerStyle = lipgloss.NewStyle().
+		Height(1).
+		BorderTop(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("8")).
+		Faint(true)
 )
 
 func (m model) RenderConversation(maxWidth int) string {
