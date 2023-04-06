@@ -68,11 +68,10 @@ func main() {
 		}
 
 		conversationConf := conf.Conversation
-		answer, err := chatgpt.ask(conversationConf, question)
+		err := chatgpt.ask(conversationConf, question)
 		if err != nil {
 			exit(err)
 		}
-		fmt.Println(answer)
 		return
 	}
 
