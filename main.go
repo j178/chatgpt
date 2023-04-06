@@ -68,7 +68,7 @@ func main() {
 		}
 
 		conversationConf := conf.Conversation
-		err := chatgpt.ask(conversationConf, question)
+		err := chatgpt.ask(conversationConf, question, os.Stdout)
 		if err != nil {
 			exit(err)
 		}

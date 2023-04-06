@@ -33,60 +33,44 @@ func newChatGPT(conf GlobalConfig) *ChatGPT {
 	return &ChatGPT{globalConf: conf, client: client}
 }
 
-func (c *ChatGPT) ask(conf ConversationConfig, question string) error {
+func (c *ChatGPT) ask(conf ConversationConfig, question string, out io.Writer) error {
+	req := openai.ChatCompletionRequest{
+		Model: conf.Model,
+		Messages: []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleSystem, Content: c.globalConf.LookupPrompt(conf.Prompt)},
+			{Role: openai.ChatMessageRoleUser, Content: question},
+		},
+		MaxTokens:   conf.MaxTokens,
+		Temperature: conf.Temperature,
+		N:           1,
+	}
 	if conf.Stream {
-		stream, err := c.client.CreateChatCompletionStream(
-			context.Background(),
-			openai.ChatCompletionRequest{
-				Model: conf.Model,
-				Messages: []openai.ChatCompletionMessage{
-					{Role: openai.ChatMessageRoleSystem, Content: c.globalConf.LookupPrompt(conf.Prompt)},
-					{Role: openai.ChatMessageRoleUser, Content: question},
-				},
-				MaxTokens:   conf.MaxTokens,
-				Temperature: conf.Temperature,
-				N:           1,
-			},
-		)
-		c.stream = stream
+		stream, err := c.client.CreateChatCompletionStream(context.Background(), req)
 		if err != nil {
-			return errMsg(err)
+			return err
 		}
 		defer stream.Close()
 		for {
 			resp, err := stream.Recv()
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					fmt.Println()
+					_, _ = fmt.Fprintln(out)
 					break
 				}
 				return err
 			}
 			content := resp.Choices[0].Delta.Content
-			fmt.Print(content)
+			_, _ = fmt.Fprint(out, content)
 		}
-		return nil
 	} else {
-		resp, err := c.client.CreateChatCompletion(
-			context.Background(),
-			openai.ChatCompletionRequest{
-				Model: conf.Model,
-				Messages: []openai.ChatCompletionMessage{
-					{Role: openai.ChatMessageRoleSystem, Content: c.globalConf.LookupPrompt(conf.Prompt)},
-					{Role: openai.ChatMessageRoleUser, Content: question},
-				},
-				MaxTokens:   conf.MaxTokens,
-				Temperature: conf.Temperature,
-				N:           1,
-			},
-		)
+		resp, err := c.client.CreateChatCompletion(context.Background(), req)
 		if err != nil {
 			return err
 		}
 		content := resp.Choices[0].Message.Content
-		fmt.Println(content)
-		return nil
+		_, _ = fmt.Fprintln(out, content)
 	}
+	return nil
 }
 
 func (c *ChatGPT) send(conf ConversationConfig, messages []openai.ChatCompletionMessage) tea.Cmd {
@@ -94,17 +78,15 @@ func (c *ChatGPT) send(conf ConversationConfig, messages []openai.ChatCompletion
 	return func() (msg tea.Msg) {
 		err := retry.Do(
 			func() error {
+				req := openai.ChatCompletionRequest{
+					Model:       conf.Model,
+					Messages:    messages,
+					MaxTokens:   conf.MaxTokens,
+					Temperature: conf.Temperature,
+					N:           1,
+				}
 				if conf.Stream {
-					stream, err := c.client.CreateChatCompletionStream(
-						context.Background(),
-						openai.ChatCompletionRequest{
-							Model:       conf.Model,
-							Messages:    messages,
-							MaxTokens:   conf.MaxTokens,
-							Temperature: conf.Temperature,
-							N:           1,
-						},
-					)
+					stream, err := c.client.CreateChatCompletionStream(context.Background(), req)
 					c.stream = stream
 					if err != nil {
 						return errMsg(err)
@@ -116,16 +98,7 @@ func (c *ChatGPT) send(conf ConversationConfig, messages []openai.ChatCompletion
 					content := resp.Choices[0].Delta.Content
 					msg = deltaAnswerMsg(content)
 				} else {
-					resp, err := c.client.CreateChatCompletion(
-						context.Background(),
-						openai.ChatCompletionRequest{
-							Model:       conf.Model,
-							Messages:    messages,
-							MaxTokens:   conf.MaxTokens,
-							Temperature: conf.Temperature,
-							N:           1,
-						},
-					)
+					resp, err := c.client.CreateChatCompletion(context.Background(), req)
 					if err != nil {
 						return errMsg(err)
 					}
