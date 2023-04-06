@@ -146,6 +146,20 @@ chatgpt -p translator
 > The prompt can be a predefined prompt, or come up with one on the fly.
 > e.g. `chatgpt -p translator` or `chatgpt -p "You are a cat. You can only meow. That's it."`
 
+### Azure OpenAI service support
+
+If you are using Azure OpenAI service, you should configure like this:
+
+```json
+{
+  "api_type": "AZURE",
+  "api_key": "xxxx",
+  "endpoint": "https://YOUR_RESOURCE_NAME.openai.azure.com",
+  "engine": "YOUR_DEPLOYMENT_NAME",
+  "api_version": "2023-03-15-preview"
+}
+```
+
 ## Troubleshooting
 
 1. `Error: unexpected EOF, please try again`
