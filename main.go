@@ -150,6 +150,10 @@ type ConversationConfig struct {
 type GlobalConfig struct {
 	APIKey       string             `json:"api_key"`
 	Endpoint     string             `json:"endpoint"`
+	APIType      openai.APIType     `json:"api_type,omitempty"`
+	APIVersion   string             `json:"api_version,omitempty"` // required when APIType is APITypeAzure or APITypeAzureAD
+	Engine       string             `json:"engine,omitempty"`      // required when APIType is APITypeAzure or APITypeAzureAD
+	OrgID        string             `json:"org_id,omitempty"`
 	Prompts      map[string]string  `json:"prompts"`
 	Conversation ConversationConfig `json:"conversation"`
 }
@@ -206,6 +210,7 @@ func readOrWriteConfig(conf *GlobalConfig) error {
 
 func initConfig() (GlobalConfig, error) {
 	conf := GlobalConfig{
+		APIType:  openai.APITypeOpenAI,
 		Endpoint: "https://api.openai.com/v1",
 		Prompts: map[string]string{
 			"default":    "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",

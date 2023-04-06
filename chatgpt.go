@@ -17,8 +17,14 @@ type ChatGPT struct {
 
 func newChatGPT(conf GlobalConfig) *ChatGPT {
 	config := openai.DefaultConfig(conf.APIKey)
+	config.OrgID = conf.OrgID
 	if conf.Endpoint != "" {
 		config.BaseURL = conf.Endpoint
+	}
+	if conf.APIType != openai.APITypeOpenAI {
+		config.APIType = conf.APIType
+		config.APIVersion = conf.APIVersion
+		config.Engine = conf.Engine
 	}
 	client := openai.NewClientWithConfig(config)
 	return &ChatGPT{globalConf: conf, client: client}
