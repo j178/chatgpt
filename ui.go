@@ -189,6 +189,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			m.conversations.RemoveCurr()
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
+			m.viewport.GotoBottom()
 			m.historyIdx = m.conversations.Curr().Len()
 		case key.Matches(msg, m.keymap.PrevConversation):
 			if m.chatgpt.answering {
