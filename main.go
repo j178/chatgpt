@@ -47,6 +47,8 @@ func main() {
 	if err != nil {
 		exit(err)
 	}
+
+	// Set default prompt (for new conversations)
 	if *promptKey != "" {
 		conf.Conversation.Prompt = *promptKey
 	}
@@ -95,6 +97,11 @@ func main() {
 
 	if *startNewConversation {
 		conversations.New(conf.Conversation)
+	} else {
+		// Override current conversations prompt
+		if isFlagPassed("p") {
+			conversations.Curr().Config.Prompt = conf.Conversation.Prompt
+		}
 	}
 
 	p := tea.NewProgram(
@@ -154,7 +161,7 @@ type GlobalConfig struct {
 	Engine       string             `json:"engine,omitempty"`      // required when APIType is APITypeAzure or APITypeAzureAD
 	OrgID        string             `json:"org_id,omitempty"`
 	Prompts      map[string]string  `json:"prompts"`
-	Conversation ConversationConfig `json:"conversation"`
+	Conversation ConversationConfig `json:"conversation"` // Default conversation config
 }
 
 func (c GlobalConfig) LookupPrompt(key string) string {
@@ -188,6 +195,9 @@ func readOrWriteConfig(conf *GlobalConfig) error {
 				return fmt.Errorf("failed to create config dir: %w", err)
 			}
 			f, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
+			if err != nil {
+				return fmt.Errorf("failed to create config file: %w", err)
+			}
 			defer func() { _ = f.Close() }()
 			enc := json.NewEncoder(f)
 			enc.SetIndent("", "  ")
@@ -282,4 +292,16 @@ func containsCJK(s string) bool {
 		}
 	}
 	return false
+}
+
+func isFlagPassed(name string) bool {
+	found := false
+	flag.Visit(
+		func(f *flag.Flag) {
+			if f.Name == name {
+				found = true
+			}
+		},
+	)
+	return found
 }
