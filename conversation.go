@@ -82,6 +82,16 @@ func (m *ConversationManager) New(conf ConversationConfig) *Conversation {
 	return c
 }
 
+func (m *ConversationManager) FindByPrompt(prompt string) *Conversation {
+	prompt = m.globalConf.LookupPrompt(prompt)
+	for _, c := range m.Conversations {
+		if m.globalConf.LookupPrompt(c.Config.Prompt) == prompt {
+			return c
+		}
+	}
+	return nil
+}
+
 func (m *ConversationManager) RemoveCurr() {
 	if len(m.Conversations) == 0 {
 		return
@@ -90,6 +100,20 @@ func (m *ConversationManager) RemoveCurr() {
 	if m.Idx >= len(m.Conversations) {
 		m.Idx = len(m.Conversations) - 1
 	}
+}
+
+func (m *ConversationManager) SetCurr(conv *Conversation) {
+	idx := -1
+	for i, c := range m.Conversations {
+		if c == conv {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return
+	}
+	m.Idx = idx
 }
 
 func (m *ConversationManager) Len() int {

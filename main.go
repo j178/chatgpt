@@ -97,10 +97,14 @@ func main() {
 
 	if *startNewConversation {
 		conversations.New(conf.Conversation)
-	} else {
-		// Override current conversations prompt
-		if isFlagPassed("p") {
-			conversations.Curr().Config.Prompt = conf.Conversation.Prompt
+	} else if *promptKey != "" {
+		// If prompt is specified, try to find conversation with the same prompt.
+		// If not found, start a new conversation
+		conv := conversations.FindByPrompt(*promptKey)
+		if conv == nil {
+			conversations.New(conf.Conversation)
+		} else {
+			conversations.SetCurr(conv)
 		}
 	}
 
@@ -292,16 +296,4 @@ func containsCJK(s string) bool {
 		}
 	}
 	return false
-}
-
-func isFlagPassed(name string) bool {
-	found := false
-	flag.Visit(
-		func(f *flag.Flag) {
-			if f.Name == name {
-				found = true
-			}
-		},
-	)
-	return found
 }
