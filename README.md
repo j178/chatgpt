@@ -22,6 +22,66 @@ cat config.yaml | chatgpt -p 'convert this yaml to json'
 echo "Hello, world" | chatgpt -p translator | say
 ```
 
+### General Key Bindings
+
+| Key Combination | Description |
+|-----------------|-------------|
+| `ctrl+j`        | Switch between single-line and multi-line input modes |
+| `enter`         | Submit text when in single-line mode |
+| `ctrl+h`        | Toggle help visibility |
+| `esc` or `ctrl+c` | Quit the application |
+| `ctrl+y`        | Copy the last answer to the clipboard |
+| `ctrl+p`        | Navigate to the previous question in history |
+| `ctrl+n`        | Navigate to the next question in history |
+| `ctrl+t`        | Start a new conversation |
+| `ctrl+x`        | Forget the current context |
+| `ctrl+r`        | Remove the current conversation |
+| `ctrl+left` or `ctrl+g` | Navigate to the previous conversation |
+| `ctrl+right` or `ctrl+o` | Navigate to the next conversation |
+
+### Viewport Key Bindings
+
+| Key Combination | Description |
+|-----------------|-------------|
+| `pgdown` or `pgdn` | Scroll down one page |
+| `pgup`           | Scroll up one page |
+| `up` or `↑`      | Scroll up one line |
+| `down` or `↓`    | Scroll down one line |
+
+### Text Area Key Bindings
+
+| Key Combination | Description |
+|-----------------|-------------|
+| `right` or `ctrl+f` | Move cursor one character forward |
+| `left` or `ctrl+b` | Move cursor one character backward |
+| `alt+right` or `alt+f` | Move cursor one word forward |
+| `alt+left` or `alt+b` | Move cursor one word backward |
+| `down` | Move cursor to the next line |
+| `up` | Move cursor to the previous line |
+| `alt+backspace` or `ctrl+w` | Delete word before the cursor |
+| `alt+delete` or `alt+d` | Delete word after the cursor |
+| `ctrl+k` | Delete all characters after the cursor |
+| `ctrl+u` | Delete all characters before the cursor |
+| `ctrl+d` | Insert a new line when in single-line mode |
+| `backspace` | Delete one character before the cursor |
+| `delete` | Delete one character after the cursor |
+| `home` or `ctrl+a` | Move cursor to the start of the line |
+| `end` or `ctrl+e` | Move cursor to the end of the line |
+| `ctrl+v` or `alt+v` | Paste text from clipboard |
+| `alt+<` or `ctrl+home` | Move cursor to the beginning of input |
+| `alt+>` or `ctrl+end` | Move cursor to the end of input |
+| `alt+c` | Capitalize word after the cursor |
+| `alt+l` | Lowercase word after the cursor |
+| `alt+u` | Uppercase word after the cursor |
+
+### Multi-line Input Mode Specific Key Bindings
+
+| Key Combination | Description |
+|-----------------|-------------|
+| `ctrl+d`        | Submit text when in multi-line mode |
+| `enter`         | Insert a new line when in multi-line mode |
+
+
 ## Installation
 
 You can download the latest binary from the [release page](https://github.com/j178/chatgpt/releases).
