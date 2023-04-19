@@ -95,11 +95,13 @@ func main() {
 
 	conversations := NewConversationManager(conf)
 
-	// If prompt is specified, try to find conversation with the same prompt.
-	// If not found, start a new conversation
-	if *promptKey != "" {
+	if *startNewConversation {
+		conversations.New(conf.Conversation)
+	} else if *promptKey != "" {
+		// If prompt is specified, try to find conversation with the same prompt.
+		// If not found, start a new conversation
 		conv := conversations.FindByPrompt(*promptKey)
-		if conv == nil || *startNewConversation {
+		if conv == nil {
 			conversations.New(conf.Conversation)
 		} else {
 			conversations.SetCurr(conv)
