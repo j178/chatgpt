@@ -1,4 +1,4 @@
-package main
+package ui
 
 import (
 	"github.com/charmbracelet/bubbles/key"
@@ -123,7 +123,7 @@ const (
 	InputModelMultiLine
 )
 
-func UseSingleLineInputMode(m *model) {
+func UseSingleLineInputMode(m *Model) {
 	m.inputMode = InputModelSingleLine
 	m.keymap.SwitchMultiline = key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "multiline mode"))
 	m.keymap.Submit = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit"))
@@ -135,7 +135,7 @@ func UseSingleLineInputMode(m *model) {
 	m.textarea.KeyMap = m.keymap.TextAreaKeys
 }
 
-func UseMultiLineInputMode(m *model) {
+func UseMultiLineInputMode(m *Model) {
 	m.inputMode = InputModelMultiLine
 	m.keymap.SwitchMultiline = key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "single line mode"))
 	m.keymap.Submit = key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "submit"))

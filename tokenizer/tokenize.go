@@ -5,13 +5,13 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-var modelCache = map[string]*tiktoken.Tiktoken{}
+var encoders = map[string]*tiktoken.Tiktoken{}
 
 func CountTokens(model, text string) int {
-	enc, ok := modelCache[model]
+	enc, ok := encoders[model]
 	if !ok {
 		enc, _ = tiktoken.EncodingForModel(model)
-		modelCache[model] = enc
+		encoders[model] = enc
 	}
 	return len(enc.Encode(text, nil, nil))
 }

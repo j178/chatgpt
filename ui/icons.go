@@ -1,6 +1,6 @@
 //go:build !windows
 
-package main
+package ui
 
 const (
 	ConversationIcon = "\uEAC7"

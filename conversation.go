@@ -1,10 +1,9 @@
-package main
+package chatgpt
 
 import (
 	"encoding/json"
 	"log"
 	"os"
-	"path/filepath"
 
 	"github.com/sashabaranov/go-openai"
 
@@ -18,18 +17,14 @@ type ConversationManager struct {
 	Idx           int             `json:"last_idx"`
 }
 
-func NewConversationManager(conf GlobalConfig) *ConversationManager {
+func NewConversationManager(conf GlobalConfig, historyFile string) *ConversationManager {
 	h := &ConversationManager{
+		file:       historyFile,
 		globalConf: conf,
 		Idx:        -1,
 	}
-	dir, err := configDir()
-	if err != nil {
-		log.Println("Failed to get config dir:", err)
-		return h
-	}
-	h.file = filepath.Join(dir, "conversations.json")
-	err = h.Load()
+
+	err := h.Load()
 	if err != nil {
 		log.Println("Failed to load history:", err)
 	}
@@ -40,7 +35,7 @@ func (m *ConversationManager) Dump() error {
 	if m.file == "" {
 		return nil
 	}
-	err := createIfNotExists(m.file, false)
+	err := CreateIfNotExists(m.file, false)
 	if err != nil {
 		return err
 	}
@@ -134,7 +129,7 @@ func (m *ConversationManager) Prev() *Conversation {
 	}
 	m.Idx--
 	if m.Idx < 0 {
-		m.Idx = 0 // dont wrap around
+		m.Idx = 0 // don't wrap around
 	}
 	return m.Conversations[m.Idx]
 }
@@ -145,7 +140,7 @@ func (m *ConversationManager) Next() *Conversation {
 	}
 	m.Idx++
 	if m.Idx >= len(m.Conversations) {
-		m.Idx = len(m.Conversations) - 1 // dont wrap around
+		m.Idx = len(m.Conversations) - 1 // don't wrap around
 	}
 	return m.Conversations[m.Idx]
 }
