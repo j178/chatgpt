@@ -1,4 +1,4 @@
-package main
+package ui
 
 import (
 	"errors"
@@ -21,6 +21,7 @@ import (
 	"github.com/muesli/reflow/wordwrap"
 	"github.com/muesli/reflow/wrap"
 
+	"github.com/j178/chatgpt"
 	"github.com/j178/chatgpt/tokenizer"
 )
 
@@ -31,31 +32,41 @@ type (
 	saveMsg        struct{}
 )
 
-type model struct {
+var (
+	Debug      bool
+	DetachMode bool
+)
+
+type Model struct {
+	width         int
+	height        int
+	historyIdx    int
+	answering     bool
+	err           error
+	keymap        keyMap
+	inputMode     InputMode
 	viewport      viewport.Model
 	textarea      textarea.Model
 	help          help.Model
 	spin          spinner.Model
-	spinning      bool
-	inputMode     InputMode
-	err           error
-	chatgpt       *ChatGPT
-	conversations *ConversationManager
-	keymap        keyMap
-	width         int
-	height        int
-	historyIdx    int
+	globalConf    chatgpt.GlobalConfig
+	chatgpt       *chatgpt.ChatGPT
+	conversations *chatgpt.ConversationManager
 	renderer      *glamour.TermRenderer
 }
 
-func initialModel(chatgpt *ChatGPT, conversations *ConversationManager) model {
+func InitialModel(
+	conf chatgpt.GlobalConfig,
+	chatgpt *chatgpt.ChatGPT,
+	conversations *chatgpt.ConversationManager,
+) Model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message..."
 	ta.Focus()
 
 	ta.Prompt = "┃ "
 	ta.CharLimit = -1
-	if debug {
+	if Debug {
 		ta.Cursor.SetMode(cursor.CursorStatic)
 	}
 	ta.SetWidth(50)
@@ -73,11 +84,12 @@ func initialModel(chatgpt *ChatGPT, conversations *ConversationManager) model {
 	)
 
 	keymap := defaultKeyMap()
-	m := model{
+	m := Model{
 		textarea:      ta,
 		viewport:      vp,
 		help:          help.New(),
 		spin:          spin,
+		globalConf:    conf,
 		chatgpt:       chatgpt,
 		conversations: conversations,
 		keymap:        keymap,
@@ -92,18 +104,18 @@ func savePeriodically() tea.Cmd {
 	return tea.Tick(15*time.Second, func(time.Time) tea.Msg { return saveMsg{} })
 }
 
-func (m model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{tea.EnterAltScreen}
-	if !debug { // disable blink when debug
+	if !Debug { // disable blink when debug
 		cmds = append(cmds, textarea.Blink)
 	}
-	if !*detachMode {
+	if !DetachMode {
 		cmds = append(cmds, savePeriodically())
 	}
 	return tea.Batch(cmds...)
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		cmd  tea.Cmd
 		cmds []tea.Cmd
@@ -128,7 +140,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
 	case spinner.TickMsg:
-		if m.spinning {
+		if m.answering {
 			m.spin, cmd = m.spin.Update(msg)
 			cmds = append(cmds, cmd)
 		}
@@ -139,7 +151,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.RenderFooter())
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		case key.Matches(msg, m.keymap.Submit):
-			if m.chatgpt.answering {
+			if m.answering {
 				break
 			}
 			input := strings.TrimSpace(m.textarea.Value())
@@ -149,10 +161,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.conversations.Curr().AddQuestion(input)
 			cmds = append(
 				cmds,
-				m.chatgpt.send(m.conversations.Curr().Config, m.conversations.Curr().GetContextMessages()),
+				func() tea.Msg {
+					content, hasMore, err := m.chatgpt.Send(
+						m.conversations.Curr().Config,
+						m.conversations.Curr().GetContextMessages(),
+					)
+					if err != nil {
+						return errMsg(err)
+					}
+					if hasMore {
+						return deltaAnswerMsg(content)
+					}
+					return answerMsg(content)
+				},
 			)
 			// Start answer spinner
-			m.spinning = true
+			m.answering = true
 			cmds = append(
 				cmds, func() tea.Msg {
 					return m.spin.Tick()
@@ -165,17 +189,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.Placeholder = ""
 			m.historyIdx = m.conversations.Curr().Len()
 		case key.Matches(msg, m.keymap.NewConversation):
-			if m.chatgpt.answering {
+			if m.answering {
 				break
 			}
 			m.err = nil
 			// TODO change config when creating new conversation
-			m.conversations.New(m.conversations.globalConf.Conversation)
+			m.conversations.New(m.globalConf.Conversation)
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
 			m.historyIdx = 0
 		case key.Matches(msg, m.keymap.ForgetContext):
-			if m.chatgpt.answering {
+			if m.answering {
 				break
 			}
 			m.err = nil
@@ -183,7 +207,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
 		case key.Matches(msg, m.keymap.RemoveConversation):
-			if m.chatgpt.answering {
+			if m.answering {
 				break
 			}
 			m.err = nil
@@ -192,7 +216,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 			m.historyIdx = m.conversations.Curr().Len()
 		case key.Matches(msg, m.keymap.PrevConversation):
-			if m.chatgpt.answering {
+			if m.answering {
 				break
 			}
 			m.err = nil
@@ -201,7 +225,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 			m.historyIdx = m.conversations.Curr().Len()
 		case key.Matches(msg, m.keymap.NextConversation):
-			if m.chatgpt.answering {
+			if m.answering {
 				break
 			}
 			m.err = nil
@@ -223,12 +247,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		case key.Matches(msg, m.keymap.Copy):
-			if m.chatgpt.answering || m.conversations.Curr().LastAnswer() == "" {
+			if m.answering || m.conversations.Curr().LastAnswer() == "" {
 				break
 			}
 			_ = clipboard.WriteAll(m.conversations.Curr().LastAnswer())
 		case key.Matches(msg, m.keymap.NextHistory):
-			if m.chatgpt.answering {
+			if m.answering {
 				break
 			}
 			idx := m.historyIdx + 1
@@ -240,7 +264,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.historyIdx = idx
 			}
 		case key.Matches(msg, m.keymap.PrevHistory):
-			if m.chatgpt.answering {
+			if m.answering {
 				break
 			}
 			idx := m.historyIdx - 1
@@ -251,21 +275,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.SetValue(q)
 			m.historyIdx = idx
 		case key.Matches(msg, m.keymap.Quit):
-			if !*detachMode {
+			if !DetachMode {
 				_ = m.conversations.Dump()
 			}
 			return m, tea.Quit
 		}
 	case deltaAnswerMsg:
 		m.conversations.Curr().UpdatePending(string(msg), false)
-		cmds = append(cmds, m.chatgpt.recv())
+		cmds = append(
+			cmds, func() tea.Msg {
+				content, err := m.chatgpt.Recv()
+				if err != nil {
+					return errMsg(err)
+				}
+				return deltaAnswerMsg(content)
+			},
+		)
 		m.err = nil
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
 	case answerMsg:
 		m.conversations.Curr().UpdatePending(string(msg), true)
-		m.spinning = false
-		m.chatgpt.done()
+		m.answering = false
+		m.chatgpt.Done()
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
 		m.textarea.Placeholder = "Send a message..."
@@ -282,9 +314,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.err = msg
 		}
-		m.spinning = false
+		m.answering = false
 		m.conversations.Curr().UpdatePending("", true)
-		m.chatgpt.done()
+		m.chatgpt.Done()
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
 		m.textarea.Placeholder = "Send a message..."
@@ -306,7 +338,7 @@ var (
 		Faint(true)
 )
 
-func (m model) RenderConversation(maxWidth int) string {
+func (m Model) RenderConversation(maxWidth int) string {
 	var sb strings.Builder
 	c := m.conversations.Curr()
 	if c == nil {
@@ -316,26 +348,26 @@ func (m model) RenderConversation(maxWidth int) string {
 
 	renderYou := func(content string) {
 		sb.WriteString(senderStyle.Render("You: "))
-		if containsCJK(content) {
+		if chatgpt.ContainsCJK(content) {
 			content = wrap.String(content, maxWidth-5)
 		} else {
 			content = wordwrap.String(content, maxWidth-5)
 		}
 		content, _ = renderer.Render(content)
-		sb.WriteString(ensureTrailingNewline(content))
+		sb.WriteString(chatgpt.EnsureTrailingNewline(content))
 	}
 	renderBot := func(content string) {
 		if content == "" {
 			return
 		}
 		sb.WriteString(botStyle.Render("ChatGPT: "))
-		if containsCJK(content) {
+		if chatgpt.ContainsCJK(content) {
 			content = wrap.String(content, maxWidth-5)
 		} else {
 			content = wordwrap.String(content, maxWidth-5)
 		}
 		content, _ = renderer.Render(content)
-		sb.WriteString(ensureTrailingNewline(content))
+		sb.WriteString(chatgpt.EnsureTrailingNewline(content))
 	}
 	for _, m := range c.Forgotten {
 		renderYou(m.Question)
@@ -356,14 +388,14 @@ func (m model) RenderConversation(maxWidth int) string {
 	return sb.String()
 }
 
-func (m model) RenderFooter() string {
+func (m Model) RenderFooter() string {
 	if m.err != nil {
 		return footerStyle.Render(errorStyle.Render(fmt.Sprintf("error: %v", m.err)))
 	}
 
 	// spinner
 	var columns []string
-	if m.spinning {
+	if m.answering {
 		columns = append(columns, m.spin.View())
 	} else {
 		columns = append(columns, m.spin.Spinner.Frames[0])
@@ -414,7 +446,7 @@ func (m model) RenderFooter() string {
 	return footer
 }
 
-func (m model) View() string {
+func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "Initializing..."
 	}

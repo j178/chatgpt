@@ -1,4 +1,4 @@
-package main
+package chatgpt
 
 import (
 	"encoding/json"
@@ -40,7 +40,7 @@ func (m *ConversationManager) Dump() error {
 	if m.file == "" {
 		return nil
 	}
-	err := createIfNotExists(m.file, false)
+	err := CreateIfNotExists(m.file, false)
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (m *ConversationManager) Prev() *Conversation {
 	}
 	m.Idx--
 	if m.Idx < 0 {
-		m.Idx = 0 // dont wrap around
+		m.Idx = 0 // don't wrap around
 	}
 	return m.Conversations[m.Idx]
 }
@@ -145,7 +145,7 @@ func (m *ConversationManager) Next() *Conversation {
 	}
 	m.Idx++
 	if m.Idx >= len(m.Conversations) {
-		m.Idx = len(m.Conversations) - 1 // dont wrap around
+		m.Idx = len(m.Conversations) - 1 // don't wrap around
 	}
 	return m.Conversations[m.Idx]
 }

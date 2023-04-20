@@ -2,7 +2,8 @@ before:
   hooks:
     - go mod tidy
 builds:
-  - env:
+  - main: ./cmd/
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
@@ -17,9 +18,9 @@ builds:
     ldflags:
       - -s
       - -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
+      - -X github.com/j178/chatgpt/main.version={{.Version}}
+      - -X github.com/j178/chatgpt/main.commit={{.Commit}}
+      - -X github.com/j178/chatgpt/main.date={{.Date}}
 
 archives:
   - format: tar.gz
