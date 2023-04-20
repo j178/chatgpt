@@ -12,9 +12,9 @@ require (
 	github.com/mattn/go-isatty v0.0.18
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/muesli/reflow v0.3.0
-	github.com/pkoukk/tiktoken-go v0.1.1-0.20230410080739-eb45b82397d3
+	github.com/pkoukk/tiktoken-go v0.1.1-0.20230418101013-cae809389480
 	github.com/postfinance/single v0.0.2
-	github.com/sashabaranov/go-openai v1.6.1
+	github.com/sashabaranov/go-openai v1.9.0
 )
 
 require (
@@ -23,7 +23,6 @@ require (
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
 	github.com/dlclark/regexp2 v1.9.0 // indirect
-	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
@@ -36,7 +35,7 @@ require (
 	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/yuin/goldmark v1.5.4 // indirect
 	github.com/yuin/goldmark-emoji v1.0.1 // indirect
-	golang.org/x/net v0.8.0 // indirect
+	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.7.0 // indirect
 	golang.org/x/term v0.7.0 // indirect
