@@ -18,9 +18,9 @@ builds:
     ldflags:
       - -s
       - -w
-      - -X github.com/j178/chatgpt/main.version={{.Version}}
-      - -X github.com/j178/chatgpt/main.commit={{.Commit}}
-      - -X github.com/j178/chatgpt/main.date={{.Date}}
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
 
 archives:
   - format: tar.gz
