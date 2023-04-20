@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"path/filepath"
 
 	"github.com/sashabaranov/go-openai"
 
@@ -18,18 +17,14 @@ type ConversationManager struct {
 	Idx           int             `json:"last_idx"`
 }
 
-func NewConversationManager(conf GlobalConfig) *ConversationManager {
+func NewConversationManager(conf GlobalConfig, historyFile string) *ConversationManager {
 	h := &ConversationManager{
+		file:       historyFile,
 		globalConf: conf,
 		Idx:        -1,
 	}
-	dir, err := configDir()
-	if err != nil {
-		log.Println("Failed to get config dir:", err)
-		return h
-	}
-	h.file = filepath.Join(dir, "conversations.json")
-	err = h.Load()
+
+	err := h.Load()
 	if err != nil {
 		log.Println("Failed to load history:", err)
 	}

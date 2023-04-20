@@ -32,7 +32,7 @@ type GlobalConfig struct {
 	Conversation ConversationConfig `json:"conversation"` // Default conversation config
 }
 
-func (c GlobalConfig) LookupPrompt(key string) string {
+func (c *GlobalConfig) LookupPrompt(key string) string {
 	prompt := c.Prompts[key]
 	if prompt == "" {
 		return key
@@ -40,23 +40,21 @@ func (c GlobalConfig) LookupPrompt(key string) string {
 	return prompt
 }
 
-func configDir() (string, error) {
-	if dir := os.Getenv("CHATGPT_CONFIG_DIR"); dir != "" {
-		return dir, nil
-	}
+func ConversationHistoryFile() string {
+	dir := configDir()
+	return filepath.Join(dir, "conversations.json")
+}
 
-	home, err := homedir.Dir()
-	if err != nil {
-		return "", err
+func configDir() string {
+	if dir := os.Getenv("CHATGPT_CONFIG_DIR"); dir != "" {
+		return dir
 	}
-	return filepath.Join(home, ".config", "chatgpt"), nil
+	home, _ := homedir.Dir()
+	return filepath.Join(home, ".config", "chatgpt")
 }
 
 func readOrWriteConfig(conf *GlobalConfig) error {
-	dir, err := configDir()
-	if err != nil {
-		return fmt.Errorf("failed to get config dir: %w", err)
-	}
+	dir := configDir()
 	path := filepath.Join(dir, "config.json")
 
 	f, err := os.Open(path)

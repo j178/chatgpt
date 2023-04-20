@@ -93,7 +93,7 @@ func main() {
 		defer func() { _ = lockFile.Unlock() }()
 	}
 
-	conversations := chatgpt.NewConversationManager(conf)
+	conversations := chatgpt.NewConversationManager(conf, chatgpt.ConversationHistoryFile())
 
 	if *startNewConversation {
 		conversations.New(conf.Conversation)
