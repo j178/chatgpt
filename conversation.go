@@ -2,6 +2,7 @@ package chatgpt
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"os"
 
@@ -55,6 +56,9 @@ func (m *ConversationManager) Load() error {
 	}
 	f, err := os.Open(m.file)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		return err
 	}
 	err = json.NewDecoder(f).Decode(m)
