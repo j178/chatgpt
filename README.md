@@ -89,7 +89,7 @@ You can download the latest binary from the [release page](https://github.com/j1
 ### Install via go
 
 ```shell
-go install github.com/j178/chatgpt@latest
+go install github.com/j178/chatgpt/cmd@latest
 ```
 
 ### Install via [HomeBrew](https://brew.sh/) on macOS/Linux
