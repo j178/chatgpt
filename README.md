@@ -1,26 +1,71 @@
-# Cli for ChatGPT
+# CLI for ChatGPT
 
-A TUI for ChatGPT API, powered by GPT-3.5-turbo and GPT-4 models.
+A CLI for ChatGPT, powered by GPT-3.5-turbo and GPT-4 models.
 
-![chatgpt-1 0](https://user-images.githubusercontent.com/10510431/229564407-e4c0b6bf-adfb-40f0-a63c-840dafbc1291.gif)
+![demo](https://user-images.githubusercontent.com/10510431/229564407-e4c0b6bf-adfb-40f0-a63c-840dafbc1291.gif)
 
 ## Usage
 
 Get or create your OpenAI API Key from here: https://platform.openai.com/account/api-keys
 
-```shell
+```sh
 export OPENAI_API_KEY=xxx
+```
 
-# Chat mode
+:speech_balloon: Start in chat mode
+
+```sh
 chatgpt
+```
 
-# Create a new chat and provide a prompt
+:speech_balloon: Start in chat mode with a provided prompt
+
+```sh
 chatgpt -n -p translator
+```
 
-# One-time chat mode, easily integrate with other tools
+:computer: Use in a pipeline
+
+```sh
 cat config.yaml | chatgpt -p 'convert this yaml to json'
 echo "Hello, world" | chatgpt -p translator | say
 ```
+
+## Installation
+
+You can download the latest binary from the [release page](https://github.com/j178/chatgpt/releases).
+
+### Install via [HomeBrew](https://brew.sh/) on macOS/Linux
+
+```shell
+brew install j178/tap/chatgpt
+```
+
+### Install via [Scoop](https://scoop.sh/) on Windows
+
+```shell
+scoop bucket add j178 https://github.com/j178/scoop-bucket.git
+scoop install j178/chatgpt
+```
+
+### Install via [Nix](https://search.nixos.org/packages) on macOS/Linux
+
+```
+environment.systemPackages = [
+  pkgs.chatgpt-cli
+];
+```
+
+### Install via go
+
+```shell
+go install github.com/j178/chatgpt/cmd@latest
+```
+
+## Keybings
+
+<details>
+<summary>Click to expand</summary>
 
 ### General Key Bindings
 
@@ -81,39 +126,14 @@ echo "Hello, world" | chatgpt -p translator | say
 | `ctrl+d`        | Submit text when in multi-line mode |
 | `enter`         | Insert a new line when in multi-line mode |
 
+</details>
 
-## Installation
+## Advanced usage
 
-You can download the latest binary from the [release page](https://github.com/j178/chatgpt/releases).
+<details>
+<summary>Click to expand </summary>
 
-### Install via go
-
-```shell
-go install github.com/j178/chatgpt/cmd@latest
-```
-
-### Install via [HomeBrew](https://brew.sh/) on macOS/Linux
-
-```shell
-brew install j178/tap/chatgpt
-```
-
-### Install via [Nix](https://search.nixos.org/packages) on macOS/Linux
-
-```
-environment.systemPackages = [
-  pkgs.chatgpt-cli
-];
-```
-
-### Install via [Scoop](https://scoop.sh/) on Windows
-
-```shell
-scoop bucket add j178 https://github.com/j178/scoop-bucket.git
-scoop install j178/chatgpt
-```
-
-## Configuration
+### Configuration
 
 This cli tool reads configuration from `~/.config/chatgpt/config.json` and saves the conversation history to `~/.config/chatgpt/conversations.json`.
 
@@ -178,7 +198,7 @@ You can change parameters for each conversation in `~/.config/chatgpt/conversati
 
 You can add more prompts in the config file, for example:
 
-```jsonc
+```json
 {
   "api_key": "sk-xxxxxx",
   "endpoint": "https://api.openai.com/v1",
@@ -198,7 +218,7 @@ You can add more prompts in the config file, for example:
 
 then use `-p` flag to switch prompt:
 
-```shell
+```sh
 chatgpt -p translator
 ```
 
@@ -219,6 +239,7 @@ If you are using Azure OpenAI service, you should configure like this:
   "api_version": "2023-03-15-preview"
 }
 ```
+</details>
 
 ## Troubleshooting
 
@@ -232,7 +253,3 @@ If you are using Azure OpenAI service, you should configure like this:
 ## License
 
 MIT
-
-## Original Author
-
-Yasuhiro Matsumoto (a.k.a. mattn)
