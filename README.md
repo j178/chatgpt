@@ -21,10 +21,10 @@ chatgpt
 :speech_balloon: Start in chat mode with a provided prompt
 
 ```sh
-chatgpt -n -p translator
+chatgpt -p translator
 ```
 
-:computer: Use in a pipeline
+:computer: Use it in a pipeline
 
 ```sh
 cat config.yaml | chatgpt -p 'convert this yaml to json'
@@ -239,6 +239,7 @@ If you are using Azure OpenAI service, you should configure like this:
   "api_version": "2023-03-15-preview"
 }
 ```
+
 </details>
 
 ## Troubleshooting
