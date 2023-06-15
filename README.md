@@ -1,5 +1,7 @@
 # CLI for ChatGPT
 
+[![GitHub downloads](https://img.shields.io/github/downloads/j178/chatgpt/total)](https://github.com/j178/leetgo/releases)
+
 A CLI for ChatGPT, powered by GPT-3.5-turbo and GPT-4 models.
 
 ![demo](https://user-images.githubusercontent.com/10510431/229564407-e4c0b6bf-adfb-40f0-a63c-840dafbc1291.gif)
