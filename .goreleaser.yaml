@@ -24,7 +24,6 @@ builds:
 
 archives:
   - format: tar.gz
-    rlcp: true
     # this name template makes the OS and Arch compatible with the results of uname.
     name_template: >-
       {{ .ProjectName }}_
@@ -62,19 +61,19 @@ changelog:
       - '^test:'
       - '(?i)^Minor'
 brews:
-- tap:
-    owner: j178
-    name: homebrew-tap
-  commit_author:
-    name: goreleaserbot
-    email: bot@goreleaser.com
-  homepage: https://github.com/j178/chatgpt
-  description: >-
-    A simple cli wrapper for ChatGPT API, powered by GPT-3.5-turbo model.
-  license: MIT
+  - repository:
+      owner: j178
+      name: homebrew-tap
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    homepage: https://github.com/j178/chatgpt
+    description: >-
+      A simple cli wrapper for ChatGPT API, powered by GPT-3.5-turbo model.
+    license: MIT
 
-scoop:
-    bucket:
+scoops:
+  - repository:
       owner: j178
       name: scoop-bucket
     commit_author:
