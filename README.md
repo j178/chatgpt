@@ -61,7 +61,7 @@ environment.systemPackages = [
 ### Install via go
 
 ```shell
-go install github.com/j178/chatgpt/cmd@latest
+go install github.com/j178/chatgpt/cmd/chatgpt@latest
 ```
 
 ## Keybings
