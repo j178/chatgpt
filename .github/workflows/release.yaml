@@ -19,13 +19,13 @@ jobs:
       - run: git fetch --force --tags
       - uses: actions/setup-go@v3
         with:
-          go-version: '1.20.x'
+          go-version: '1.21.x'
           cache: true
       - uses: goreleaser/goreleaser-action@v4
         with:
           distribution: goreleaser
           version: latest
-          args: release --rm-dist
+          args: release --clean
         env:
           # Custom secret here since we need to access to j178/homebrew-tap and j178/scoop-bucket repo.
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}

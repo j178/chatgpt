@@ -2,7 +2,7 @@ before:
   hooks:
     - go mod tidy
 builds:
-  - main: ./cmd/
+  - main: ./cmd/chatgpt
     env:
       - CGO_ENABLED=0
     goos:
