@@ -424,18 +424,19 @@ func (m Model) RenderFooter() string {
 	prompt := m.conversations.Curr().Config.Prompt
 	prompt = fmt.Sprintf("%s %s", PromptIcon, prompt)
 	columns = append(columns, prompt)
+	n := len(columns)
 
 	totalWidth := lipgloss.Width(strings.Join(columns, ""))
-	padding := (m.width - totalWidth) / (len(columns) - 1)
+	padding := (m.width - totalWidth) / (n - 1)
 	if padding < 0 {
 		padding = 2
 	}
 
-	if totalWidth+(len(columns)-1)*padding > m.width {
-		remainingSpace := m.width - (lipgloss.Width(
-			strings.Join(columns[:len(columns)-1], ""),
-		) + (len(columns)-2)*padding + 3)
-		columns[len(columns)-1] = columns[len(columns)-1][:remainingSpace] + "..."
+	// truncate last column
+	if totalWidth+(n-1)*padding > m.width {
+		w := lipgloss.Width(strings.Join(columns[:n-1], ""))
+		remainingSpace := m.width - (w + (n-2)*padding + len("..."))
+		columns[n-1] = columns[n-1][:remainingSpace] + "..."
 	}
 
 	footer := strings.Join(columns, strings.Repeat(" ", padding))
