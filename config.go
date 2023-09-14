@@ -27,13 +27,13 @@ type KeyMapConfig struct {
 	MultilineSubmit        []string `json:"multiline_submit,omitempty"`
 	InsertNewline          []string `json:"insert_newline,omitempty"`
 	MultilineInsertNewLine []string `json:"multiline_insert_newline,omitempty"`
-	ToggleHelp             []string `json:"toggle_help,omitempty"`
+	Help                   []string `json:"help,omitempty"`
 	Quit                   []string `json:"quit,omitempty"`
-	Copy                   []string `json:"copy,omitempty"`
-	PrevHistory            []string `json:"prev_history,omitempty"`
-	NextHistory            []string `json:"next_history,omitempty"`
+	CopyLastAnswer         []string `json:"copy_last_answer,omitempty"`
+	PreviousQuestion       []string `json:"previous_question,omitempty"`
+	NextQuestion           []string `json:"next_question,omitempty"`
 	NewConversation        []string `json:"new_conversation,omitempty"`
-	PrevConversation       []string `json:"prev_conversation,omitempty"`
+	PreviousConversation   []string `json:"previous_conversation,omitempty"`
 	NextConversation       []string `json:"next_conversation,omitempty"`
 	RemoveConversation     []string `json:"remove_conversation,omitempty"`
 	ForgetContext          []string `json:"forget_context,omitempty"`
@@ -113,13 +113,13 @@ func defaultKeyMapConfig() KeyMapConfig {
 		InsertNewline:          []string{"ctrl+d"},
 		MultilineSubmit:        []string{"ctrl+d"},
 		MultilineInsertNewLine: []string{"enter"},
-		ToggleHelp:             []string{"ctrl+h"},
+		Help:                   []string{"ctrl+h"},
 		Quit:                   []string{"esc", "ctrl+c"},
-		Copy:                   []string{"ctrl+y"},
-		PrevHistory:            []string{"ctrl+p"},
-		NextHistory:            []string{"ctrl+n"},
+		CopyLastAnswer:         []string{"ctrl+y"},
+		PreviousQuestion:       []string{"ctrl+p"},
+		NextQuestion:           []string{"ctrl+n"},
 		NewConversation:        []string{"ctrl+t"},
-		PrevConversation:       []string{"ctrl+left", "ctrl+g"},
+		PreviousConversation:   []string{"ctrl+left", "ctrl+g"},
 		NextConversation:       []string{"ctrl+right", "ctrl+o"},
 		RemoveConversation:     []string{"ctrl+r"},
 		ForgetContext:          []string{"ctrl+x"},

@@ -59,15 +59,15 @@ func newKeyMap(conf chatgpt.KeyMapConfig) keyMap {
 	return keyMap{
 		SwitchMultiline:    newBinding(conf.SwitchMultiline, "multiline mode"),
 		Submit:             newBinding(conf.Submit, "submit"),
-		ToggleHelp:         newBinding(conf.ToggleHelp, "toggle help"),
+		ToggleHelp:         newBinding(conf.Help, "toggle help"),
 		Quit:               newBinding(conf.Quit, "quit"),
-		Copy:               newBinding(conf.Copy, "copy last answer"),
-		PrevHistory:        newBinding(conf.PrevHistory, "previous question"),
-		NextHistory:        newBinding(conf.NextHistory, "next question"),
+		Copy:               newBinding(conf.CopyLastAnswer, "copy last answer"),
+		PrevHistory:        newBinding(conf.PreviousQuestion, "previous question"),
+		NextHistory:        newBinding(conf.NextQuestion, "next question"),
 		NewConversation:    newBinding(conf.NewConversation, "new conversation"),
 		ForgetContext:      newBinding(conf.ForgetContext, "forget context"),
 		RemoveConversation: newBinding(conf.RemoveConversation, "remove current conversation"),
-		PrevConversation:   newBinding(conf.PrevConversation, "previous conversation"),
+		PrevConversation:   newBinding(conf.PreviousConversation, "previous conversation"),
 		NextConversation:   newBinding(conf.NextConversation, "next conversation"),
 		ViewPortKeys: viewport.KeyMap{
 			PageDown: key.NewBinding(

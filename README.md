@@ -128,6 +128,42 @@ go install github.com/j178/chatgpt/cmd/chatgpt@latest
 | `ctrl+d`        | Submit text when in multi-line mode |
 | `enter`         | Insert a new line when in multi-line mode |
 
+
+### Custom Key Bindings
+
+You can change the default key bindings by adding `key_map` dictionary to the configuration file. For example:
+
+```jsonc
+{
+  "api_key": "sk-xxxxxx",
+  "endpoint": "https://api.openai.com/v1",
+  "prompts": {
+    // ...
+  },
+  // Default conversation parameters
+  "conversation": {
+    // ...
+  },
+  "key_map": {
+    "switch_multiline": ["ctrl+j"],
+    "submit": ["enter"],
+    "multiline_submit": ["ctrl+d"],
+    "insert_newline": ["enter"],
+    "multiline_insert_newline": ["ctrl+d"],
+    "help": ["ctrl+h"],
+    "quit": ["esc", "ctrl+c"],
+    "copy_last_answer": ["ctrl+y"],
+    "previous_question": ["ctrl+p"],
+    "next_question": ["ctrl+n"],
+    "new_conversation": ["ctrl+t"],
+    "previous_conversation": ["ctrl+left", "ctrl+g"],
+    "next_conversation": ["ctrl+right", "ctrl+o"],
+    "remove_conversation": ["ctrl+r"],
+    "forget_context": ["ctrl+x"],
+  }
+}
+```
+
 </details>
 
 ## Advanced usage
