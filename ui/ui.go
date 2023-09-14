@@ -239,6 +239,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m = m.SetInputMode(InputModelSingleLine)
 			}
+			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.RenderFooter())
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		case key.Matches(msg, m.keymap.Copy):
 			if m.answering || m.conversations.Curr().LastAnswer() == "" {
@@ -339,7 +340,6 @@ func (m Model) SetInputMode(mode InputMode) Model {
 	}
 	m.viewport.KeyMap = m.keymap.ViewPortKeys
 	m.textarea.KeyMap = m.keymap.TextAreaKeys
-	m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.RenderFooter())
 	return m
 }
 
