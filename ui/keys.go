@@ -4,13 +4,25 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
+
+	"github.com/j178/chatgpt"
 )
+
+type InputMode int
+
+const (
+	InputModelSingleLine InputMode = iota
+	InputModelMultiLine
+)
+
+func newBinding(keys []string, help string) key.Binding {
+	return key.NewBinding(key.WithKeys(keys...), key.WithHelp(keys[0], help))
+}
 
 type keyMap struct {
 	SwitchMultiline    key.Binding
 	Submit             key.Binding
-	ShowHelp           key.Binding
-	HideHelp           key.Binding
+	ToggleHelp         key.Binding
 	Quit               key.Binding
 	Copy               key.Binding
 	PrevHistory        key.Binding
@@ -25,7 +37,7 @@ type keyMap struct {
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.ShowHelp}
+	return []key.Binding{k.ToggleHelp}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
@@ -43,30 +55,20 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	}
 }
 
-func defaultKeyMap() keyMap {
+func newKeyMap(conf chatgpt.KeyMapConfig) keyMap {
 	return keyMap{
-		SwitchMultiline: key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "multiline mode")),
-		Submit:          key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit")),
-		ShowHelp:        key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "show help")),
-		HideHelp:        key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "hide help")),
-		Quit:            key.NewBinding(key.WithKeys("esc", "ctrl+c"), key.WithHelp("esc", "quit")),
-		Copy:            key.NewBinding(key.WithKeys("ctrl+y"), key.WithHelp("ctrl+y", "copy last answer")),
-		PrevHistory:     key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "previous question")),
-		NextHistory:     key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("ctrl+n", "next question")),
-		NewConversation: key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "new conversation")),
-		ForgetContext:   key.NewBinding(key.WithKeys("ctrl+x"), key.WithHelp("ctrl+x", "forget context")),
-		RemoveConversation: key.NewBinding(
-			key.WithKeys("ctrl+r"),
-			key.WithHelp("ctrl+r", "remove current conversation"),
-		),
-		PrevConversation: key.NewBinding(
-			key.WithKeys("ctrl+left", "ctrl+g"),
-			key.WithHelp("ctrl+left", "previous conversation"),
-		),
-		NextConversation: key.NewBinding(
-			key.WithKeys("ctrl+right", "ctrl+o"),
-			key.WithHelp("ctrl+right", "next conversation"),
-		),
+		SwitchMultiline:    newBinding(conf.SwitchMultiline, "multiline mode"),
+		Submit:             newBinding(conf.Submit, "submit"),
+		ToggleHelp:         newBinding(conf.ToggleHelp, "toggle help"),
+		Quit:               newBinding(conf.Quit, "quit"),
+		Copy:               newBinding(conf.Copy, "copy last answer"),
+		PrevHistory:        newBinding(conf.PrevHistory, "previous question"),
+		NextHistory:        newBinding(conf.NextHistory, "next question"),
+		NewConversation:    newBinding(conf.NewConversation, "new conversation"),
+		ForgetContext:      newBinding(conf.ForgetContext, "forget context"),
+		RemoveConversation: newBinding(conf.RemoveConversation, "remove current conversation"),
+		PrevConversation:   newBinding(conf.PrevConversation, "previous conversation"),
+		NextConversation:   newBinding(conf.NextConversation, "next conversation"),
 		ViewPortKeys: viewport.KeyMap{
 			PageDown: key.NewBinding(
 				key.WithKeys("pgdown"),
@@ -114,35 +116,4 @@ func defaultKeyMap() keyMap {
 			TransposeCharacterBackward: key.NewBinding(key.WithDisabled()),
 		},
 	}
-}
-
-type InputMode int
-
-const (
-	InputModelSingleLine InputMode = iota
-	InputModelMultiLine
-)
-
-func UseSingleLineInputMode(m *Model) {
-	m.inputMode = InputModelSingleLine
-	m.keymap.SwitchMultiline = key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "multiline mode"))
-	m.keymap.Submit = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "submit"))
-	m.keymap.TextAreaKeys.InsertNewline = key.NewBinding(
-		key.WithKeys("ctrl+d"),
-		key.WithHelp("ctrl+d", "insert new line"),
-	)
-	m.viewport.KeyMap = m.keymap.ViewPortKeys
-	m.textarea.KeyMap = m.keymap.TextAreaKeys
-}
-
-func UseMultiLineInputMode(m *Model) {
-	m.inputMode = InputModelMultiLine
-	m.keymap.SwitchMultiline = key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "single line mode"))
-	m.keymap.Submit = key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "submit"))
-	m.keymap.TextAreaKeys.InsertNewline = key.NewBinding(
-		key.WithKeys("enter"),
-		key.WithHelp("enter", "insert new line"),
-	)
-	m.viewport.KeyMap = m.keymap.ViewPortKeys
-	m.textarea.KeyMap = m.keymap.TextAreaKeys
 }

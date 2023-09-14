@@ -21,6 +21,24 @@ type ConversationConfig struct {
 	MaxTokens     int     `json:"max_tokens"`
 }
 
+type KeyMapConfig struct {
+	SwitchMultiline        []string `json:"switch_multiline"`
+	Submit                 []string `json:"submit,omitempty"`
+	MultilineSubmit        []string `json:"multiline_submit,omitempty"`
+	InsertNewline          []string `json:"insert_newline,omitempty"`
+	MultilineInsertNewLine []string `json:"multiline_insert_newline,omitempty"`
+	ToggleHelp             []string `json:"toggle_help,omitempty"`
+	Quit                   []string `json:"quit,omitempty"`
+	Copy                   []string `json:"copy,omitempty"`
+	PrevHistory            []string `json:"prev_history,omitempty"`
+	NextHistory            []string `json:"next_history,omitempty"`
+	NewConversation        []string `json:"new_conversation,omitempty"`
+	PrevConversation       []string `json:"prev_conversation,omitempty"`
+	NextConversation       []string `json:"next_conversation,omitempty"`
+	RemoveConversation     []string `json:"remove_conversation,omitempty"`
+	ForgetContext          []string `json:"forget_context,omitempty"`
+}
+
 type GlobalConfig struct {
 	APIKey       string             `json:"api_key"`
 	Endpoint     string             `json:"endpoint"`
@@ -30,6 +48,7 @@ type GlobalConfig struct {
 	OrgID        string             `json:"org_id,omitempty"`
 	Prompts      map[string]string  `json:"prompts"`
 	Conversation ConversationConfig `json:"conversation"` // Default conversation config
+	KeyMap       KeyMapConfig       `json:"key_map"`
 }
 
 func (c *GlobalConfig) LookupPrompt(key string) string {
@@ -87,6 +106,26 @@ func readOrWriteConfig(conf *GlobalConfig) error {
 	return nil
 }
 
+func defaultKeyMapConfig() KeyMapConfig {
+	return KeyMapConfig{
+		SwitchMultiline:        []string{"ctrl+j"},
+		Submit:                 []string{"enter"},
+		InsertNewline:          []string{"ctrl+d"},
+		MultilineSubmit:        []string{"ctrl+d"},
+		MultilineInsertNewLine: []string{"enter"},
+		ToggleHelp:             []string{"ctrl+h"},
+		Quit:                   []string{"esc", "ctrl+c"},
+		Copy:                   []string{"ctrl+y"},
+		PrevHistory:            []string{"ctrl+p"},
+		NextHistory:            []string{"ctrl+n"},
+		NewConversation:        []string{"ctrl+t"},
+		PrevConversation:       []string{"ctrl+left", "ctrl+g"},
+		NextConversation:       []string{"ctrl+right", "ctrl+o"},
+		RemoveConversation:     []string{"ctrl+r"},
+		ForgetContext:          []string{"ctrl+x"},
+	}
+}
+
 func InitConfig() (GlobalConfig, error) {
 	conf := GlobalConfig{
 		APIType:  openai.APITypeOpenAI,
@@ -104,6 +143,7 @@ func InitConfig() (GlobalConfig, error) {
 			Temperature:   0,
 			MaxTokens:     1024,
 		},
+		KeyMap: defaultKeyMapConfig(),
 	}
 	err := readOrWriteConfig(&conf)
 	if err != nil {

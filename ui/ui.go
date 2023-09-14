@@ -83,7 +83,7 @@ func InitialModel(
 		glamour.WithWordWrap(0), // we do hard-wrapping ourselves
 	)
 
-	keymap := defaultKeyMap()
+	keymap := newKeyMap(conf.KeyMap)
 	m := Model{
 		textarea:      ta,
 		viewport:      vp,
@@ -92,11 +92,11 @@ func InitialModel(
 		globalConf:    conf,
 		chatgpt:       chatgpt,
 		conversations: conversations,
+		historyIdx:    conversations.Curr().Len(),
 		keymap:        keymap,
 		renderer:      renderer,
 	}
-	m.historyIdx = m.conversations.Curr().Len()
-	UseSingleLineInputMode(&m)
+	m = m.SetInputMode(InputModelSingleLine)
 	return m
 }
 
@@ -146,7 +146,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, m.keymap.ShowHelp, m.keymap.HideHelp):
+		case key.Matches(msg, m.keymap.ToggleHelp):
 			m.help.ShowAll = !m.help.ShowAll
 			m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.RenderFooter())
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
@@ -235,15 +235,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.historyIdx = m.conversations.Curr().Len()
 		case key.Matches(msg, m.keymap.SwitchMultiline):
 			if m.inputMode == InputModelSingleLine {
-				UseMultiLineInputMode(&m)
-				m.textarea.ShowLineNumbers = true
-				m.textarea.SetHeight(2)
-				m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.RenderFooter())
+				m = m.SetInputMode(InputModelMultiLine)
 			} else {
-				UseSingleLineInputMode(&m)
-				m.textarea.ShowLineNumbers = false
-				m.textarea.SetHeight(1)
-				m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.RenderFooter())
+				m = m.SetInputMode(InputModelSingleLine)
 			}
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		case key.Matches(msg, m.keymap.Copy):
@@ -326,16 +320,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m Model) SetInputMode(mode InputMode) Model {
+	keys := m.globalConf.KeyMap
+	if mode == InputModelMultiLine {
+		m.keymap.SwitchMultiline = newBinding(keys.SwitchMultiline, "single line mode")
+		m.keymap.Submit = newBinding(keys.MultilineSubmit, "submit")
+		m.keymap.TextAreaKeys.InsertNewline = newBinding(keys.MultilineInsertNewLine, "insert new line")
+		m.inputMode = InputModelMultiLine
+		m.textarea.ShowLineNumbers = true
+		m.textarea.SetHeight(2)
+	} else {
+		m.keymap.SwitchMultiline = newBinding(keys.SwitchMultiline, "multiline mode")
+		m.keymap.Submit = newBinding(keys.Submit, "submit")
+		m.keymap.TextAreaKeys.InsertNewline = newBinding(keys.InsertNewline, "insert new line")
+		m.inputMode = InputModelSingleLine
+		m.textarea.ShowLineNumbers = false
+		m.textarea.SetHeight(1)
+	}
+	m.viewport.KeyMap = m.keymap.ViewPortKeys
+	m.textarea.KeyMap = m.keymap.TextAreaKeys
+	m.viewport.Height = m.height - m.textarea.Height() - lipgloss.Height(m.RenderFooter())
+	return m
+}
+
 var (
 	senderStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5"))
 	botStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
 	errorStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1"))
 	footerStyle = lipgloss.NewStyle().
-		Height(1).
-		BorderTop(true).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("8")).
-		Faint(true)
+			Height(1).
+			BorderTop(true).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("8")).
+			Faint(true)
 )
 
 func (m Model) RenderConversation(maxWidth int) string {
