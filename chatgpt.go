@@ -17,16 +17,17 @@ type ChatGPT struct {
 }
 
 func NewChatGPT(conf GlobalConfig) *ChatGPT {
-	config := openai.DefaultConfig(conf.APIKey)
-	config.OrgID = conf.OrgID
-	if conf.Endpoint != "" {
-		config.BaseURL = conf.Endpoint
-	}
-	if conf.APIType != openai.APITypeOpenAI {
-		config.APIType = conf.APIType
+	var config openai.ClientConfig
+	if conf.APIType == openai.APITypeOpenAI {
+		config = openai.DefaultConfig(conf.APIKey)
+		if conf.Endpoint != "" {
+			config.BaseURL = conf.Endpoint
+		}
+	} else {
+		config = openai.DefaultAzureConfig(conf.APIKey, conf.Endpoint)
 		config.APIVersion = conf.APIVersion
-		config.Engine = conf.Engine
 	}
+	config.OrgID = conf.OrgID
 	client := openai.NewClientWithConfig(config)
 	return &ChatGPT{globalConf: conf, client: client}
 }
