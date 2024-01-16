@@ -195,6 +195,8 @@ Here is the default configuration:
     "context_length": 6,
     // Model to use, one of gpt-3.5 and gpt-4 series models
     "model": "gpt-3.5-turbo",
+    // What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic.
+    "temperature": 1,
     // Whether to stream the response
     "stream": true,
     // Maximum number of tokens to generate
