@@ -27,7 +27,9 @@ func NewChatGPT(conf GlobalConfig) *ChatGPT {
 		}
 	case openai.APITypeAzure, openai.APITypeAzureAD:
 		cc = openai.DefaultAzureConfig(conf.APIKey, conf.Endpoint)
-		cc.APIVersion = conf.APIVersion
+		if conf.APIVersion != "" {
+			cc.APIVersion = conf.APIVersion
+		}
 		cc.AzureModelMapperFunc = func(model string) string {
 			m, ok := conf.ModelMapping[model]
 			if ok {
