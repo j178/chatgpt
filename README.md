@@ -272,13 +272,24 @@ If you are using Azure OpenAI service, you should configure like this:
 {
   "api_type": "AZURE",
   "api_key": "xxxx",
+  "api_version": "2023-05-15",
   "endpoint": "https://YOUR_RESOURCE_NAME.openai.azure.com",
-  "engine": "YOUR_DEPLOYMENT_NAME",
-  "api_version": "2023-03-15-preview"
+  "model_mapping": {
+    "gpt-3.5-turbo": "your gpt-3.5-turbo deployment name",
+    "gpt-4": "your gpt-4 deployment name"
+  }
 }
 ```
 
 </details>
+
+Notes:
+
+- `api_type` should be "AZURE" or "AZURE_AD".
+- `api_version` defaults to "2023-05-15" if not specified.
+- Configure `model_mapping` to map model names to your deployment names. If not specified, the model name will be used as the deployment name with `.` or `:` removed (e.g. "gpt-3.5-turbo" -> "gpt-35-turbo").
+
+Find more details about Azure OpenAI service here: https://learn.microsoft.com/en-US/azure/ai-services/openai/reference.
 
 ## Troubleshooting
 

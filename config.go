@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mitchellh/go-homedir"
 	"github.com/sashabaranov/go-openai"
@@ -43,7 +43,8 @@ type GlobalConfig struct {
 	APIKey       string             `json:"api_key"`
 	Endpoint     string             `json:"endpoint"`
 	APIType      openai.APIType     `json:"api_type,omitempty"`
-	APIVersion   string             `json:"api_version,omitempty"` // required when APIType is APITypeAzure or APITypeAzureAD
+	APIVersion   string             `json:"api_version,omitempty"`   // required when APIType is APITypeAzure or APITypeAzureAD
+	ModelMapping map[string]string  `json:"model_mapping,omitempty"` // required when APIType is APITypeAzure or APITypeAzureAD
 	OrgID        string             `json:"org_id,omitempty"`
 	Prompts      map[string]string  `json:"prompts"`
 	Conversation ConversationConfig `json:"conversation"` // Default conversation config
@@ -146,7 +147,7 @@ func InitConfig() (GlobalConfig, error) {
 	}
 	err := readOrWriteConfig(&conf)
 	if err != nil {
-		log.Println(err)
+		return GlobalConfig{}, err
 	}
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey != "" {
@@ -158,6 +159,12 @@ func InitConfig() (GlobalConfig, error) {
 	}
 	if conf.APIKey == "" {
 		return GlobalConfig{}, errors.New("Missing API key. Set it in `~/.config/chatgpt/config.json` or by setting the `OPENAI_API_KEY` environment variable. You can find or create your API key at https://platform.openai.com/account/api-keys.")
+	}
+	conf.APIType = openai.APIType(strings.ToUpper(string(conf.APIType)))
+	switch conf.APIType {
+	default:
+		return GlobalConfig{}, fmt.Errorf("unknown API type: %s", conf.APIType)
+	case openai.APITypeOpenAI, openai.APITypeAzure, openai.APITypeAzureAD:
 	}
 	return conf, nil
 }
