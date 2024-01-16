@@ -108,16 +108,18 @@ func (c *ChatGPT) Send(conf ConversationConfig, messages []openai.ChatCompletion
 				if err != nil {
 					return err
 				}
-				content := resp.Choices[0].Delta.Content
-				msg = content
+				if len(resp.Choices) > 0 {
+					msg = resp.Choices[0].Delta.Content
+				}
 				hasMore = true
 			} else {
 				resp, err := c.client.CreateChatCompletion(context.Background(), req)
 				if err != nil {
 					return err
 				}
-				content := resp.Choices[0].Message.Content
-				msg = content
+				if len(resp.Choices) > 0 {
+					msg = resp.Choices[0].Message.Content
+				}
 				hasMore = false
 			}
 			return nil
@@ -135,6 +137,9 @@ func (c *ChatGPT) Recv() (string, error) {
 	resp, err := c.stream.Recv()
 	if err != nil {
 		return "", err
+	}
+	if len(resp.Choices) == 0 {
+		return "", nil
 	}
 	content := resp.Choices[0].Delta.Content
 	return content, nil
