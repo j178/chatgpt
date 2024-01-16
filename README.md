@@ -260,11 +260,14 @@ then use `-p` flag to switch prompt:
 chatgpt -p translator
 ```
 
-> **Note**
+> [!NOTE]
 > The prompt can be a predefined prompt, or come up with one on the fly.
 > e.g. `chatgpt -p translator` or `chatgpt -p "You are a cat. You can only meow. That's it."`
 
-### Azure OpenAI service support
+
+</details>
+
+## Azure OpenAI service support
 
 If you are using Azure OpenAI service, you should configure like this:
 
@@ -280,8 +283,6 @@ If you are using Azure OpenAI service, you should configure like this:
   }
 }
 ```
-
-</details>
 
 Notes:
 
