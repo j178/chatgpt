@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 
 	"github.com/avast/retry-go"
 	"github.com/sashabaranov/go-openai"
@@ -17,18 +18,29 @@ type ChatGPT struct {
 }
 
 func NewChatGPT(conf GlobalConfig) *ChatGPT {
-	var config openai.ClientConfig
-	if conf.APIType == openai.APITypeOpenAI {
-		config = openai.DefaultConfig(conf.APIKey)
+	var cc openai.ClientConfig
+	switch conf.APIType {
+	case openai.APITypeOpenAI:
+		cc = openai.DefaultConfig(conf.APIKey)
 		if conf.Endpoint != "" {
-			config.BaseURL = conf.Endpoint
+			cc.BaseURL = conf.Endpoint
 		}
-	} else {
-		config = openai.DefaultAzureConfig(conf.APIKey, conf.Endpoint)
-		config.APIVersion = conf.APIVersion
+	case openai.APITypeAzure, openai.APITypeAzureAD:
+		cc = openai.DefaultAzureConfig(conf.APIKey, conf.Endpoint)
+		cc.APIVersion = conf.APIVersion
+		cc.AzureModelMapperFunc = func(model string) string {
+			m, ok := conf.ModelMapping[model]
+			if ok {
+				return m
+			}
+			// Fallback to use model name (without . or : ) as deployment name.
+			return regexp.MustCompile(`[.:]`).ReplaceAllString(model, "")
+		}
+	default:
+		panic(fmt.Sprintf("unknown API type: %s", conf.APIType))
 	}
-	config.OrgID = conf.OrgID
-	client := openai.NewClientWithConfig(config)
+	cc.OrgID = conf.OrgID
+	client := openai.NewClientWithConfig(cc)
 	return &ChatGPT{globalConf: conf, client: client}
 }
 
