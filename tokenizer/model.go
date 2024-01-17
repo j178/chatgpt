@@ -77,7 +77,7 @@ func EncodingNameForModel(model string) (string, error) {
 			return encodingName, nil
 		}
 	}
-	return "", tokenizer.ErrEncodingNotSupported
+	return "", tokenizer.ErrModelNotSupported
 }
 
 func ForModel(model string) (tokenizer.Codec, error) {
