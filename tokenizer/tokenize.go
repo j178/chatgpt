@@ -1,32 +1,52 @@
 package tokenizer
 
 import (
+	"strings"
+
 	"github.com/pkoukk/tiktoken-go"
 	"github.com/sashabaranov/go-openai"
 )
 
 var encoders = map[string]*tiktoken.Tiktoken{}
 
-func CountTokens(model, text string) int {
+func getEncoding(model string) (*tiktoken.Tiktoken, error) {
 	enc, ok := encoders[model]
+	var err error
 	if !ok {
-		enc, _ = tiktoken.EncodingForModel(model)
+		enc, err = tiktoken.EncodingForModel(model)
+		if err != nil {
+			return nil, err
+		}
 		encoders[model] = enc
+	}
+	return enc, nil
+}
+
+func CheckModel(model string) error {
+	_, err := getEncoding(model)
+	return err
+}
+
+func CountTokens(model, text string) int {
+	enc, err := getEncoding(model)
+	if err != nil {
+		panic(err)
 	}
 	return len(enc.Encode(text, nil, nil))
 }
 
 // CountMessagesTokens based on https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
 func CountMessagesTokens(model string, messages []openai.ChatCompletionMessage) int {
-	var tokens int
-	var tokensPerMessage int
-	var tokensPerName int
+	var (
+		tokens           int
+		tokensPerMessage int
+		tokensPerName    int
+	)
 
-	switch model {
-	case openai.GPT3Dot5Turbo, openai.GPT3Dot5Turbo0301:
+	if strings.HasPrefix(model, "gpt-3.5") {
 		tokensPerMessage = 4 // every message follows <|start|>{role/name}\n{content}<|end|>\n
 		tokensPerName = -1   // if there's a name, the role is omitted
-	case openai.GPT4, openai.GPT40314, openai.GPT432K, openai.GPT432K0314:
+	} else if strings.HasPrefix(model, "gpt-4") {
 		tokensPerMessage = 3
 		tokensPerName = 1
 	}

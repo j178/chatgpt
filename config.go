@@ -10,6 +10,8 @@ import (
 
 	"github.com/mitchellh/go-homedir"
 	"github.com/sashabaranov/go-openai"
+
+	"github.com/j178/chatgpt/tokenizer"
 )
 
 type ConversationConfig struct {
@@ -140,7 +142,7 @@ func InitConfig() (GlobalConfig, error) {
 			Prompt:        "default",
 			ContextLength: 6,
 			Stream:        true,
-			Temperature:   0,
+			Temperature:   1.0,
 			MaxTokens:     1024,
 		},
 		KeyMap: defaultKeyMapConfig(),
@@ -157,14 +159,21 @@ func InitConfig() (GlobalConfig, error) {
 	if endpoint != "" {
 		conf.Endpoint = endpoint
 	}
+
 	if conf.APIKey == "" {
 		return GlobalConfig{}, errors.New("Missing API key. Set it in `~/.config/chatgpt/config.json` or by setting the `OPENAI_API_KEY` environment variable. You can find or create your API key at https://platform.openai.com/account/api-keys.")
 	}
+
 	conf.APIType = openai.APIType(strings.ToUpper(string(conf.APIType)))
 	switch conf.APIType {
+	case openai.APITypeOpenAI, openai.APITypeAzure, openai.APITypeAzureAD:
 	default:
 		return GlobalConfig{}, fmt.Errorf("unknown API type: %s", conf.APIType)
-	case openai.APITypeOpenAI, openai.APITypeAzure, openai.APITypeAzureAD:
+	}
+
+	err = tokenizer.CheckModel(conf.Conversation.Model)
+	if err != nil {
+		return GlobalConfig{}, fmt.Errorf("invalid model %s", conf.Conversation.Model)
 	}
 	return conf, nil
 }

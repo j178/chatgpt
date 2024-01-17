@@ -3,7 +3,7 @@ package chatgpt
 import (
 	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
 	"os"
 
 	"github.com/sashabaranov/go-openai"
@@ -18,7 +18,7 @@ type ConversationManager struct {
 	Idx           int             `json:"last_idx"`
 }
 
-func NewConversationManager(conf GlobalConfig, historyFile string) *ConversationManager {
+func NewConversationManager(conf GlobalConfig, historyFile string) (*ConversationManager, error) {
 	h := &ConversationManager{
 		file:       historyFile,
 		globalConf: conf,
@@ -27,9 +27,9 @@ func NewConversationManager(conf GlobalConfig, historyFile string) *Conversation
 
 	err := h.Load()
 	if err != nil {
-		log.Println("Failed to load history:", err)
+		return nil, fmt.Errorf("Failed to load conversation history: %w", err)
 	}
-	return h
+	return h, nil
 }
 
 func (m *ConversationManager) Dump() error {
@@ -65,7 +65,11 @@ func (m *ConversationManager) Load() error {
 	if err != nil {
 		return err
 	}
-	for _, c := range m.Conversations {
+	for i, c := range m.Conversations {
+		err = tokenizer.CheckModel(c.Config.Model)
+		if err != nil {
+			return fmt.Errorf("invalid model %s in conversation %d", c.Config.Model, i+1)
+		}
 		c.manager = m
 	}
 	return nil
