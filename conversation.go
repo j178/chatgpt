@@ -66,7 +66,7 @@ func (m *ConversationManager) Load() error {
 		return err
 	}
 	for i, c := range m.Conversations {
-		err = tokenizer.CheckModel(c.Config.Model)
+		_, err = tokenizer.ForModel(c.Config.Model)
 		if err != nil {
 			return fmt.Errorf("invalid model %s in conversation %d", c.Config.Model, i+1)
 		}

@@ -171,7 +171,7 @@ func InitConfig() (GlobalConfig, error) {
 		return GlobalConfig{}, fmt.Errorf("unknown API type: %s", conf.APIType)
 	}
 
-	err = tokenizer.CheckModel(conf.Conversation.Model)
+	_, err = tokenizer.ForModel(conf.Conversation.Model)
 	if err != nil {
 		return GlobalConfig{}, fmt.Errorf("invalid model %s", conf.Conversation.Model)
 	}
