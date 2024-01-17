@@ -8,10 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/j178/tiktoken-go"
 	"github.com/mitchellh/go-homedir"
 	"github.com/sashabaranov/go-openai"
-
-	"github.com/j178/chatgpt/tokenizer"
 )
 
 type ConversationConfig struct {
@@ -171,7 +170,7 @@ func InitConfig() (GlobalConfig, error) {
 		return GlobalConfig{}, fmt.Errorf("unknown API type: %s", conf.APIType)
 	}
 
-	err = tokenizer.CheckModel(conf.Conversation.Model)
+	_, err = tiktoken.ForModel(conf.Conversation.Model)
 	if err != nil {
 		return GlobalConfig{}, fmt.Errorf("invalid model %s", conf.Conversation.Model)
 	}

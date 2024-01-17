@@ -1,41 +1,20 @@
 package tokenizer
 
 import (
-	"github.com/pkoukk/tiktoken-go"
-	tiktoken_loader "github.com/pkoukk/tiktoken-go-loader"
+	"github.com/j178/tiktoken-go"
 	"github.com/sashabaranov/go-openai"
 )
 
-func init() {
-	tiktoken.SetBpeLoader(tiktoken_loader.NewOfflineLoader())
-}
-
-var encoders = map[string]*tiktoken.Tiktoken{}
-
-func getEncoding(model string) (*tiktoken.Tiktoken, error) {
-	enc, ok := encoders[model]
-	var err error
-	if !ok {
-		enc, err = tiktoken.EncodingForModel(model)
-		if err != nil {
-			return nil, err
-		}
-		encoders[model] = enc
-	}
-	return enc, nil
-}
-
-func CheckModel(model string) error {
-	_, err := getEncoding(model)
-	return err
-}
-
 func CountTokens(model, text string) int {
-	enc, err := getEncoding(model)
+	enc, err := tiktoken.ForModel(model)
 	if err != nil {
 		panic(err)
 	}
-	return len(enc.Encode(text, nil, nil))
+	cnt, err := enc.Count(text)
+	if err != nil {
+		panic(err)
+	}
+	return cnt
 }
 
 // CountMessagesTokens based on https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
