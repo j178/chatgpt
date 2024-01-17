@@ -11,12 +11,12 @@ require (
 	github.com/charmbracelet/bubbletea v0.25.0
 	github.com/charmbracelet/glamour v0.6.0
 	github.com/charmbracelet/lipgloss v0.9.1
+	github.com/j178/tiktoken-go v0.0.0-20240117113851-e3c3d064f380
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/muesli/reflow v0.3.0
 	github.com/postfinance/single v0.0.2
 	github.com/sashabaranov/go-openai v1.18.2
-	github.com/tiktoken-go/tokenizer v0.1.0
 )
 
 require (

@@ -1,19 +1,20 @@
 package tokenizer
 
 import (
+	"github.com/j178/tiktoken-go"
 	"github.com/sashabaranov/go-openai"
 )
 
 func CountTokens(model, text string) int {
-	enc, err := ForModel(model)
+	enc, err := tiktoken.ForModel(model)
 	if err != nil {
 		panic(err)
 	}
-	ids, _, err := enc.Encode(text)
+	cnt, err := enc.Count(text)
 	if err != nil {
 		panic(err)
 	}
-	return len(ids)
+	return cnt
 }
 
 // CountMessagesTokens based on https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
