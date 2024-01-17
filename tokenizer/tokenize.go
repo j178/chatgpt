@@ -4,8 +4,13 @@ import (
 	"strings"
 
 	"github.com/pkoukk/tiktoken-go"
+	tiktoken_loader "github.com/pkoukk/tiktoken-go-loader"
 	"github.com/sashabaranov/go-openai"
 )
+
+func init() {
+	tiktoken.SetBpeLoader(tiktoken_loader.NewOfflineLoader())
+}
 
 var encoders = map[string]*tiktoken.Tiktoken{}
 
