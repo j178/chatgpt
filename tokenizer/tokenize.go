@@ -1,8 +1,6 @@
 package tokenizer
 
 import (
-	"strings"
-
 	"github.com/pkoukk/tiktoken-go"
 	tiktoken_loader "github.com/pkoukk/tiktoken-go-loader"
 	"github.com/sashabaranov/go-openai"
@@ -48,12 +46,27 @@ func CountMessagesTokens(model string, messages []openai.ChatCompletionMessage) 
 		tokensPerName    int
 	)
 
-	if strings.HasPrefix(model, "gpt-3.5") {
-		tokensPerMessage = 4 // every message follows <|start|>{role/name}\n{content}<|end|>\n
-		tokensPerName = -1   // if there's a name, the role is omitted
-	} else if strings.HasPrefix(model, "gpt-4") {
+	switch model {
+	case "gpt-3.5-turbo-0613",
+		"gpt-3.5-turbo-16k-0613",
+		"gpt-4-0314",
+		"gpt-4-32k-0314",
+		"gpt-4-0613",
+		"gpt-4-32k-0613":
 		tokensPerMessage = 3
 		tokensPerName = 1
+	case "gpt-3.5-turbo-0301":
+		tokensPerMessage = 4 // every message follows <|start|>{role/name}\n{content}<|end|>\n
+		tokensPerName = -1   // if there's a name, the role is omitted
+	case "gpt-3.5-turbo":
+		// gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613.
+		return CountMessagesTokens("gpt-3.5-turbo-0613", messages)
+	case "gpt-4":
+		// gpt-4 may update over time. Returning num tokens assuming gpt-4-0613
+		return CountMessagesTokens("gpt-4-0613", messages)
+	default:
+		// not implemented
+		return 0
 	}
 
 	for k := range messages {
