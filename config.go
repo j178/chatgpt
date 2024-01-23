@@ -73,30 +73,30 @@ func configDir() string {
 	return filepath.Join(home, ".config", "chatgpt")
 }
 
-func readOrWriteConfig(conf *GlobalConfig) error {
+func readOrCreateConfig(conf *GlobalConfig) error {
 	dir := configDir()
 	path := filepath.Join(dir, "config.json")
 
 	f, err := os.Open(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			err = os.MkdirAll(filepath.Dir(path), 0o755)
-			if err != nil {
-				return fmt.Errorf("failed to create config dir: %w", err)
-			}
-			f, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
-			if err != nil {
-				return fmt.Errorf("failed to create config file: %w", err)
-			}
-			defer func() { _ = f.Close() }()
-			enc := json.NewEncoder(f)
-			enc.SetIndent("", "  ")
-			err = enc.Encode(conf)
-			if err != nil {
-				return fmt.Errorf("failed to write config file: %w", err)
-			}
-			return nil
+	if errors.Is(err, os.ErrNotExist) {
+		err = os.MkdirAll(filepath.Dir(path), 0o700)
+		if err != nil {
+			return fmt.Errorf("failed to create config dir: %w", err)
 		}
+		f, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+		if err != nil {
+			return fmt.Errorf("failed to create config file: %w", err)
+		}
+		defer func() { _ = f.Close() }()
+		enc := json.NewEncoder(f)
+		enc.SetIndent("", "  ")
+		err = enc.Encode(conf)
+		if err != nil {
+			return fmt.Errorf("failed to write config file: %w", err)
+		}
+		return nil
+	}
+	if err != nil {
 		return fmt.Errorf("failed to open config file: %w", err)
 	}
 	defer func() { _ = f.Close() }()
@@ -142,11 +142,11 @@ func InitConfig() (GlobalConfig, error) {
 			ContextLength: 6,
 			Stream:        true,
 			Temperature:   1.0,
-			MaxTokens:     1024,
+			MaxTokens:     4096,
 		},
 		KeyMap: defaultKeyMapConfig(),
 	}
-	err := readOrWriteConfig(&conf)
+	err := readOrCreateConfig(&conf)
 	if err != nil {
 		return GlobalConfig{}, err
 	}
