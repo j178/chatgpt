@@ -348,11 +348,11 @@ var (
 	botStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
 	errorStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1"))
 	footerStyle = lipgloss.NewStyle().
-			Height(1).
-			BorderTop(true).
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("8")).
-			Faint(true)
+		Height(1).
+		BorderTop(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("8")).
+		Faint(true)
 )
 
 func (m Model) RenderConversation(maxWidth int) string {
@@ -436,6 +436,9 @@ func (m Model) RenderFooter() string {
 
 	// help
 	columns = append(columns, fmt.Sprintf("%s ctrl+h", HelpIcon))
+
+	// TODO: display provider and model => display as the bot name
+	// TODO: summarize prompt as title
 
 	// prompt
 	prompt := m.conversations.Curr().Config.Prompt

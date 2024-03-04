@@ -1,8 +1,8 @@
-# CLI for ChatGPT
+# Chat with any GPT
 
 [![GitHub downloads](https://img.shields.io/github/downloads/j178/chatgpt/total)](https://github.com/j178/chatgpt/releases)
 
-A CLI for ChatGPT, powered by GPT-3.5-turbo and GPT-4 models.
+An interactive TUI for chatting with any GPT model, including OpenAI, Azure OpenAI, Google Gemini, Anthropic Claude, Cohere, Baidu Ernie, HuggingFace, and Ollama.
 
 ![demo](https://user-images.githubusercontent.com/10510431/229564407-e4c0b6bf-adfb-40f0-a63c-840dafbc1291.gif)
 

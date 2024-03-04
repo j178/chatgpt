@@ -6,17 +6,58 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
+	"github.com/j178/llms/llms/openai"
 	"github.com/j178/tiktoken-go"
 	"github.com/mitchellh/go-homedir"
-	"github.com/sashabaranov/go-openai"
 )
 
+type ProviderType string
+
+const (
+	ProviderOpenAI   ProviderType = "openai"
+	ProviderGoogleAI ProviderType = "googleai"
+	ProviderCohere   ProviderType = "cohere"
+)
+
+type ProviderConfig struct {
+	Name string         `json:"name"`
+	Type ProviderType   `json:"type"`
+	KVs  map[string]any `json:"-"`
+}
+
+func (c ProviderConfig) MarshalJSON() ([]byte, error) {
+	kvs := make(map[string]any)
+	for k, v := range c.KVs {
+		kvs[k] = v
+	}
+	kvs["type"] = string(c.Type)
+	return json.Marshal(kvs)
+}
+
+func (c ProviderConfig) UnmarshalJSON(data []byte) error {
+	var kvs map[string]any
+	err := json.Unmarshal(data, &kvs)
+	if err != nil {
+		return err
+	}
+	ty := kvs["type"]
+	if ty == nil {
+
+	}
+	c.Type = ProviderType(kvs["type"].(string))
+	delete(kvs, "type")
+	c.KVs = kvs
+	return nil
+}
+
 type ConversationConfig struct {
+	Provider      string  `json:"provider"`
+	Model         string  `json:"model"`
 	Prompt        string  `json:"prompt"`
 	ContextLength int     `json:"context_length"`
-	Model         string  `json:"model"`
 	Stream        bool    `json:"stream"`
 	Temperature   float32 `json:"temperature"`
 	MaxTokens     int     `json:"max_tokens"`
@@ -40,7 +81,7 @@ type KeyMapConfig struct {
 	ForgetContext          []string `json:"forget_context,omitempty"`
 }
 
-type GlobalConfig struct {
+type LegacyConfig struct {
 	APIKey       string             `json:"api_key"`
 	Endpoint     string             `json:"endpoint"`
 	APIType      openai.APIType     `json:"api_type,omitempty"`
@@ -51,6 +92,66 @@ type GlobalConfig struct {
 	Conversation ConversationConfig `json:"conversation"` // Default conversation config
 	KeyMap       KeyMapConfig       `json:"key_map"`
 }
+
+type GlobalConfig struct {
+	Version      int                `json:"version"`
+	Providers    []ProviderConfig   `json:"providers"`
+	Prompts      map[string]string  `json:"prompts"`
+	Conversation ConversationConfig `json:"conversation"` // Default conversation config
+	KeyMap       KeyMapConfig       `json:"key_map"`
+}
+
+func (c *GlobalConfig) UnmarshalJSON(data []byte) error {
+	type alias GlobalConfig
+	err := json.Unmarshal(data, (*alias)(c))
+	if err != nil {
+		return err
+	}
+
+	if c.Version == 0 || c.Version == 1 {
+		// Convert legacy config
+		legacy := LegacyConfig{}
+		err = json.Unmarshal(data, &legacy)
+		if err != nil {
+			return err
+		}
+
+		model := convertModelToAzureDeployment(legacy.Conversation.Model, legacy.ModelMapping)
+		legacy.Conversation.Model = model
+		legacy.Conversation.Provider = defaultProviderName
+		c.Version = currentConfigVersion
+		c.Prompts = legacy.Prompts
+		c.Conversation = legacy.Conversation
+		c.KeyMap = legacy.KeyMap
+		c.Providers = []ProviderConfig{
+			{
+				Type: ProviderOpenAI,
+				Name: defaultProviderName,
+				KVs: map[string]any{
+					"base_url":     legacy.Endpoint,
+					"api_key":      legacy.APIKey,
+					"api_type":     legacy.APIType,
+					"api_version":  legacy.APIVersion,
+					"organization": legacy.OrgID,
+				},
+			},
+		}
+	}
+	return nil
+}
+
+func convertModelToAzureDeployment(model string, mapping map[string]string) string {
+	m, ok := mapping[model]
+	if ok {
+		return m
+	}
+	// Fallback to use model name (without . or : ) as deployment name.
+	return regexp.MustCompile(`[.:]`).ReplaceAllString(model, "")
+}
+
+const currentConfigVersion = 2
+const defaultProviderName = "openai-1"
+const defaultModel = "gpt-3.5-turbo"
 
 func (c *GlobalConfig) LookupPrompt(key string) string {
 	prompt := c.Prompts[key]
@@ -127,17 +228,19 @@ func defaultKeyMapConfig() KeyMapConfig {
 	}
 }
 
-func InitConfig() (GlobalConfig, error) {
-	conf := GlobalConfig{
-		APIType:  openai.APITypeOpenAI,
-		Endpoint: "https://api.openai.com/v1",
-		Prompts: map[string]string{
-			"default":    "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
-			"translator": "I want you to act as an English translator, spelling corrector and improver. I will speak to you in any language and you will detect the language, translate it and answer in the corrected and improved version of my text, in English. I want you to replace my simplified A0-level words and sentences with more beautiful and elegant, upper level English words and sentences. The translation should be natural, easy to understand, and concise. Keep the meaning same, but make them more literary. I want you to only reply the correction, the improvements and nothing else, do not write explanations.",
-			"shell":      "Return a one-line bash command with the functionality I will describe. Return ONLY the command ready to run in the terminal. The command should do the following:",
+func defaultConfig() GlobalConfig {
+	return GlobalConfig{
+		Version: currentConfigVersion,
+		Providers: []ProviderConfig{
+			{
+				Type: ProviderOpenAI,
+				Name: defaultProviderName,
+				KVs:  map[string]any{"base_url": "https://api.openai.com/v1"},
+			},
 		},
 		Conversation: ConversationConfig{
-			Model:         openai.GPT3Dot5Turbo,
+			Provider:      defaultProviderName,
+			Model:         defaultModel,
 			Prompt:        "default",
 			ContextLength: 6,
 			Stream:        true,
@@ -145,11 +248,21 @@ func InitConfig() (GlobalConfig, error) {
 			MaxTokens:     4096,
 		},
 		KeyMap: defaultKeyMapConfig(),
+		Prompts: map[string]string{
+			"default":    "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
+			"translator": "I want you to act as an English translator, spelling corrector and improver. I will speak to you in any language and you will detect the language, translate it and answer in the corrected and improved version of my text, in English. I want you to replace my simplified A0-level words and sentences with more beautiful and elegant, upper level English words and sentences. The translation should be natural, easy to understand, and concise. Keep the meaning same, but make them more literary. I want you to only reply the correction, the improvements and nothing else, do not write explanations.",
+			"shell":      "Return a one-line bash command with the functionality I will describe. Return ONLY the command ready to run in the terminal. The command should do the following:",
+		},
 	}
+}
+
+func InitConfig() (GlobalConfig, error) {
+	conf := defaultConfig()
 	err := readOrCreateConfig(&conf)
 	if err != nil {
 		return GlobalConfig{}, err
 	}
+
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey != "" {
 		conf.APIKey = apiKey
