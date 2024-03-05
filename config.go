@@ -7,16 +7,19 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/j178/llms/llms/openai"
-	"github.com/j178/tiktoken-go"
 	"github.com/mitchellh/go-homedir"
 )
+
+const currentConfigVersion = 2
+const defaultProviderName = "openai-1"
+const defaultModel = "gpt-3.5-turbo"
 
 type ProviderType string
 
 const (
+	// TODO add more providers
 	ProviderOpenAI   ProviderType = "openai"
 	ProviderGoogleAI ProviderType = "googleai"
 	ProviderCohere   ProviderType = "cohere"
@@ -81,7 +84,7 @@ type KeyMapConfig struct {
 	ForgetContext          []string `json:"forget_context,omitempty"`
 }
 
-type LegacyConfig struct {
+type LegacyV0Config struct {
 	APIKey       string             `json:"api_key"`
 	Endpoint     string             `json:"endpoint"`
 	APIType      openai.APIType     `json:"api_type,omitempty"`
@@ -101,58 +104,6 @@ type GlobalConfig struct {
 	KeyMap       KeyMapConfig       `json:"key_map"`
 }
 
-func (c *GlobalConfig) UnmarshalJSON(data []byte) error {
-	type alias GlobalConfig
-	err := json.Unmarshal(data, (*alias)(c))
-	if err != nil {
-		return err
-	}
-
-	if c.Version == 0 || c.Version == 1 {
-		// Convert legacy config
-		legacy := LegacyConfig{}
-		err = json.Unmarshal(data, &legacy)
-		if err != nil {
-			return err
-		}
-
-		model := convertModelToAzureDeployment(legacy.Conversation.Model, legacy.ModelMapping)
-		legacy.Conversation.Model = model
-		legacy.Conversation.Provider = defaultProviderName
-		c.Version = currentConfigVersion
-		c.Prompts = legacy.Prompts
-		c.Conversation = legacy.Conversation
-		c.KeyMap = legacy.KeyMap
-		c.Providers = []ProviderConfig{
-			{
-				Type: ProviderOpenAI,
-				Name: defaultProviderName,
-				KVs: map[string]any{
-					"base_url":     legacy.Endpoint,
-					"api_key":      legacy.APIKey,
-					"api_type":     legacy.APIType,
-					"api_version":  legacy.APIVersion,
-					"organization": legacy.OrgID,
-				},
-			},
-		}
-	}
-	return nil
-}
-
-func convertModelToAzureDeployment(model string, mapping map[string]string) string {
-	m, ok := mapping[model]
-	if ok {
-		return m
-	}
-	// Fallback to use model name (without . or : ) as deployment name.
-	return regexp.MustCompile(`[.:]`).ReplaceAllString(model, "")
-}
-
-const currentConfigVersion = 2
-const defaultProviderName = "openai-1"
-const defaultModel = "gpt-3.5-turbo"
-
 func (c *GlobalConfig) LookupPrompt(key string) string {
 	prompt := c.Prompts[key]
 	if prompt == "" {
@@ -162,50 +113,21 @@ func (c *GlobalConfig) LookupPrompt(key string) string {
 }
 
 func ConversationHistoryFile() string {
-	dir := configDir()
+	dir := ConfigDir()
 	return filepath.Join(dir, "conversations.json")
 }
 
-func configDir() string {
+func ConfigFile() string {
+	dir := ConfigDir()
+	return filepath.Join(dir, "config.json")
+}
+
+func ConfigDir() string {
 	if dir := os.Getenv("CHATGPT_CONFIG_DIR"); dir != "" {
 		return dir
 	}
 	home, _ := homedir.Dir()
 	return filepath.Join(home, ".config", "chatgpt")
-}
-
-func readOrCreateConfig(conf *GlobalConfig) error {
-	dir := configDir()
-	path := filepath.Join(dir, "config.json")
-
-	f, err := os.Open(path)
-	if errors.Is(err, os.ErrNotExist) {
-		err = os.MkdirAll(filepath.Dir(path), 0o700)
-		if err != nil {
-			return fmt.Errorf("failed to create config dir: %w", err)
-		}
-		f, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
-		if err != nil {
-			return fmt.Errorf("failed to create config file: %w", err)
-		}
-		defer func() { _ = f.Close() }()
-		enc := json.NewEncoder(f)
-		enc.SetIndent("", "  ")
-		err = enc.Encode(conf)
-		if err != nil {
-			return fmt.Errorf("failed to write config file: %w", err)
-		}
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("failed to open config file: %w", err)
-	}
-	defer func() { _ = f.Close() }()
-	err = json.NewDecoder(f).Decode(conf)
-	if err != nil {
-		return fmt.Errorf("failed to read config file: %w", err)
-	}
-	return nil
 }
 
 func defaultKeyMapConfig() KeyMapConfig {
@@ -228,8 +150,8 @@ func defaultKeyMapConfig() KeyMapConfig {
 	}
 }
 
-func defaultConfig() GlobalConfig {
-	return GlobalConfig{
+func defaultConfig() *GlobalConfig {
+	return &GlobalConfig{
 		Version: currentConfigVersion,
 		Providers: []ProviderConfig{
 			{
@@ -256,36 +178,131 @@ func defaultConfig() GlobalConfig {
 	}
 }
 
-func InitConfig() (GlobalConfig, error) {
-	conf := defaultConfig()
-	err := readOrCreateConfig(&conf)
+func readConfig() (*GlobalConfig, error) {
+	path := ConfigFile()
+	content, err := os.ReadFile(path)
 	if err != nil {
-		return GlobalConfig{}, err
+		return nil, fmt.Errorf("failed to open config file: %w", err)
 	}
 
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey != "" {
-		conf.APIKey = apiKey
-	}
-	endpoint := os.Getenv("OPENAI_API_ENDPOINT")
-	if endpoint != "" {
-		conf.Endpoint = endpoint
-	}
-
-	if conf.APIKey == "" {
-		return GlobalConfig{}, errors.New("Missing API key. Set it in `~/.config/chatgpt/config.json` or by setting the `OPENAI_API_KEY` environment variable. You can find or create your API key at https://platform.openai.com/account/api-keys.")
-	}
-
-	conf.APIType = openai.APIType(strings.ToUpper(string(conf.APIType)))
-	switch conf.APIType {
-	case openai.APITypeOpenAI, openai.APITypeAzure, openai.APITypeAzureAD:
-	default:
-		return GlobalConfig{}, fmt.Errorf("unknown API type: %s", conf.APIType)
-	}
-
-	_, err = tiktoken.ForModel(conf.Conversation.Model)
+	// Read version first
+	version := struct {
+		Version int `json:"version"`
+	}{}
+	err = json.Unmarshal(content, &version)
 	if err != nil {
-		return GlobalConfig{}, fmt.Errorf("invalid model %s", conf.Conversation.Model)
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
-	return conf, nil
+	if version.Version == 0 || version.Version == 1 {
+		err = migrateV1Config(content)
+		if err != nil {
+			return nil, fmt.Errorf("failed to migrate config file: %w", err)
+		}
+	}
+
+	// Read again
+	content, err = os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open config file: %w", err)
+	}
+	var conf GlobalConfig
+	err = json.Unmarshal(content, &conf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+	return &conf, nil
+}
+
+func writeConfig(conf *GlobalConfig) error {
+	path := ConfigFile()
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return fmt.Errorf("failed to open config file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	err = enc.Encode(conf)
+	if err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+	return nil
+}
+
+func isAzure(apiType openai.APIType) bool {
+	return apiType == openai.APITypeAzure || apiType == openai.APITypeAzureAD
+}
+
+func convertModelToAzureDeployment(model string, mapping map[string]string) string {
+	m, ok := mapping[model]
+	if ok {
+		return m
+	}
+	// Fallback to use model name (without . or : ) as deployment name.
+	return regexp.MustCompile(`[.:]`).ReplaceAllString(model, "")
+}
+
+func migrateV1Config(data []byte) error {
+	conf := GlobalConfig{}
+	v0 := LegacyV0Config{}
+	err := json.Unmarshal(data, &v0)
+	if err != nil {
+		return err
+	}
+
+	model := v0.Conversation.Model
+	isAzure := isAzure(v0.APIType)
+	if isAzure {
+		model = convertModelToAzureDeployment(model, v0.ModelMapping)
+	}
+	v0.Conversation.Model = model
+	v0.Conversation.Provider = defaultProviderName
+	conf.Version = currentConfigVersion
+	conf.Prompts = v0.Prompts
+	conf.Conversation = v0.Conversation
+	conf.KeyMap = v0.KeyMap
+	conf.Providers = []ProviderConfig{
+		{
+			Type: ProviderOpenAI,
+			Name: defaultProviderName,
+			KVs: map[string]any{
+				"base_url":     v0.Endpoint,
+				"api_key":      v0.APIKey,
+				"api_type":     v0.APIType,
+				"api_version":  v0.APIVersion,
+				"organization": v0.OrgID,
+			},
+		},
+	}
+	err = writeConfig(&conf)
+	if err != nil {
+		return err
+	}
+
+	// Migrate conversation config
+	conversations, err := NewConversationManager(&conf, ConversationHistoryFile())
+	if errors.Is(err, os.ErrNotExist) {
+		err = nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, conv := range conversations.Conversations {
+		conv.Config.Provider = defaultProviderName
+		if isAzure {
+			conv.Config.Model = convertModelToAzureDeployment(conv.Config.Model, v0.ModelMapping)
+		}
+	}
+	err = conversations.Dump()
+	return err
+}
+
+func InitConfig() (*GlobalConfig, error) {
+	conf, err := readConfig()
+	if errors.Is(err, os.ErrNotExist) {
+		conf = defaultConfig()
+		err = writeConfig(conf)
+		return conf, err
+	}
+	return conf, err
 }
