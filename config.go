@@ -20,9 +20,10 @@ type ProviderType string
 
 const (
 	// TODO add more providers
-	ProviderOpenAI   ProviderType = "openai"
-	ProviderGoogleAI ProviderType = "googleai"
-	ProviderCohere   ProviderType = "cohere"
+	ProviderOpenAI ProviderType = "openai"
+	ProviderGemini ProviderType = "gemini"
+	ProviderClaude ProviderType = "claude"
+	ProviderCohere ProviderType = "cohere"
 )
 
 type ProviderConfig struct {
@@ -31,27 +32,39 @@ type ProviderConfig struct {
 	KVs  map[string]any `json:"-"`
 }
 
-func (c ProviderConfig) MarshalJSON() ([]byte, error) {
+func (c *ProviderConfig) MarshalJSON() ([]byte, error) {
 	kvs := make(map[string]any)
+	kvs["type"] = string(c.Type)
+	kvs["name"] = c.Name
 	for k, v := range c.KVs {
 		kvs[k] = v
 	}
-	kvs["type"] = string(c.Type)
 	return json.Marshal(kvs)
 }
 
-func (c ProviderConfig) UnmarshalJSON(data []byte) error {
+func getStr(kvs map[string]any, key string) string {
+	v, ok := kvs[key]
+	if !ok {
+		return ""
+	}
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return s
+}
+
+func (c *ProviderConfig) UnmarshalJSON(data []byte) error {
 	var kvs map[string]any
 	err := json.Unmarshal(data, &kvs)
 	if err != nil {
 		return err
 	}
-	ty := kvs["type"]
-	if ty == nil {
-
-	}
-	c.Type = ProviderType(kvs["type"].(string))
+	c.Type = ProviderType(getStr(kvs, "type"))
+	c.Name = getStr(kvs, "name")
 	delete(kvs, "type")
+	delete(kvs, "name")
+
 	c.KVs = kvs
 	return nil
 }
@@ -62,12 +75,12 @@ type ConversationConfig struct {
 	Prompt        string  `json:"prompt"`
 	ContextLength int     `json:"context_length"`
 	Stream        bool    `json:"stream"`
-	Temperature   float32 `json:"temperature"`
+	Temperature   float64 `json:"temperature"`
 	MaxTokens     int     `json:"max_tokens"`
 }
 
 type KeyMapConfig struct {
-	SwitchMultiline        []string `json:"switch_multiline"`
+	SwitchMultiline        []string `json:"switch_multiline,omitempty"`
 	Submit                 []string `json:"submit,omitempty"`
 	MultilineSubmit        []string `json:"multiline_submit,omitempty"`
 	InsertNewline          []string `json:"insert_newline,omitempty"`
@@ -97,11 +110,11 @@ type LegacyV0Config struct {
 }
 
 type GlobalConfig struct {
-	Version      int                `json:"version"`
-	Providers    []ProviderConfig   `json:"providers"`
-	Prompts      map[string]string  `json:"prompts"`
-	Conversation ConversationConfig `json:"conversation"` // Default conversation config
-	KeyMap       KeyMapConfig       `json:"key_map"`
+	Version             int                `json:"version"`
+	Providers           []ProviderConfig   `json:"providers"`
+	DefaultConversation ConversationConfig `json:"default_conversation"`
+	Prompts             map[string]string  `json:"prompts"`
+	KeyMap              KeyMapConfig       `json:"key_map"`
 }
 
 func (c *GlobalConfig) LookupPrompt(key string) string {
@@ -112,7 +125,7 @@ func (c *GlobalConfig) LookupPrompt(key string) string {
 	return prompt
 }
 
-func ConversationHistoryFile() string {
+func ConversationsFile() string {
 	dir := ConfigDir()
 	return filepath.Join(dir, "conversations.json")
 }
@@ -160,7 +173,7 @@ func defaultConfig() *GlobalConfig {
 				KVs:  map[string]any{"base_url": "https://api.openai.com/v1"},
 			},
 		},
-		Conversation: ConversationConfig{
+		DefaultConversation: ConversationConfig{
 			Provider:      defaultProviderName,
 			Model:         defaultModel,
 			Prompt:        "default",
@@ -175,6 +188,27 @@ func defaultConfig() *GlobalConfig {
 			"translator": "I want you to act as an English translator, spelling corrector and improver. I will speak to you in any language and you will detect the language, translate it and answer in the corrected and improved version of my text, in English. I want you to replace my simplified A0-level words and sentences with more beautiful and elegant, upper level English words and sentences. The translation should be natural, easy to understand, and concise. Keep the meaning same, but make them more literary. I want you to only reply the correction, the improvements and nothing else, do not write explanations.",
 			"shell":      "Return a one-line bash command with the functionality I will describe. Return ONLY the command ready to run in the terminal. The command should do the following:",
 		},
+	}
+}
+
+func defaultV0Config() *LegacyV0Config {
+	return &LegacyV0Config{
+		APIType:  openai.APITypeOpenAI,
+		Endpoint: "https://api.openai.com/v1",
+		Prompts: map[string]string{
+			"default":    "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
+			"translator": "I want you to act as an English translator, spelling corrector and improver. I will speak to you in any language and you will detect the language, translate it and answer in the corrected and improved version of my text, in English. I want you to replace my simplified A0-level words and sentences with more beautiful and elegant, upper level English words and sentences. The translation should be natural, easy to understand, and concise. Keep the meaning same, but make them more literary. I want you to only reply the correction, the improvements and nothing else, do not write explanations.",
+			"shell":      "Return a one-line bash command with the functionality I will describe. Return ONLY the command ready to run in the terminal. The command should do the following:",
+		},
+		Conversation: ConversationConfig{
+			Model:         defaultModel,
+			Prompt:        "default",
+			ContextLength: 6,
+			Stream:        true,
+			Temperature:   1.0,
+			MaxTokens:     4096,
+		},
+		KeyMap: defaultKeyMapConfig(),
 	}
 }
 
@@ -243,23 +277,23 @@ func convertModelToAzureDeployment(model string, mapping map[string]string) stri
 }
 
 func migrateV1Config(data []byte) error {
-	conf := GlobalConfig{}
-	v0 := LegacyV0Config{}
-	err := json.Unmarshal(data, &v0)
+	conf := defaultConfig()
+	v0 := defaultV0Config()
+	err := json.Unmarshal(data, v0)
 	if err != nil {
 		return err
 	}
 
 	model := v0.Conversation.Model
-	isAzure := isAzure(v0.APIType)
-	if isAzure {
+	azure := isAzure(v0.APIType)
+	if azure {
 		model = convertModelToAzureDeployment(model, v0.ModelMapping)
 	}
 	v0.Conversation.Model = model
 	v0.Conversation.Provider = defaultProviderName
 	conf.Version = currentConfigVersion
 	conf.Prompts = v0.Prompts
-	conf.Conversation = v0.Conversation
+	conf.DefaultConversation = v0.Conversation
 	conf.KeyMap = v0.KeyMap
 	conf.Providers = []ProviderConfig{
 		{
@@ -274,13 +308,13 @@ func migrateV1Config(data []byte) error {
 			},
 		},
 	}
-	err = writeConfig(&conf)
+	err = writeConfig(conf)
 	if err != nil {
 		return err
 	}
 
 	// Migrate conversation config
-	conversations, err := NewConversationManager(&conf, ConversationHistoryFile())
+	conversations, err := NewConversationManager(conf, ConversationsFile())
 	if errors.Is(err, os.ErrNotExist) {
 		err = nil
 	}
@@ -289,7 +323,7 @@ func migrateV1Config(data []byte) error {
 	}
 	for _, conv := range conversations.Conversations {
 		conv.Config.Provider = defaultProviderName
-		if isAzure {
+		if azure {
 			conv.Config.Model = convertModelToAzureDeployment(conv.Config.Model, v0.ModelMapping)
 		}
 	}
@@ -304,5 +338,20 @@ func InitConfig() (*GlobalConfig, error) {
 		err = writeConfig(conf)
 		return conf, err
 	}
+
+	names := map[string]struct{}{}
+	for i, provider := range conf.Providers {
+		if provider.Type == "" {
+			return nil, fmt.Errorf("type of provider %d is empty", i+1)
+		}
+		if provider.Name == "" {
+			return nil, fmt.Errorf("name of provider %d is empty", i+1)
+		}
+		if _, ok := names[provider.Name]; ok {
+			return nil, fmt.Errorf("duplicate provider name: %s", provider.Name)
+		}
+		names[provider.Name] = struct{}{}
+	}
+
 	return conf, err
 }

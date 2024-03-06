@@ -1,0 +1,19 @@
+{
+  "api_type": "AZURE",
+  "api_key": "111111111111111111111111",
+  "api_version": "2023-09-01-preview",
+  "endpoint": "https://xxxxx.openai.azure.com/",
+  "prompts": {
+    "default": "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
+    "translator": "I want you to act as an English translator, spelling corrector and improver. I will speak to you in any language and you will detect the language, translate it and answer in the corrected and improved version of my text, in English. I want you to replace my simplified A0-level words and sentences with more beautiful and elegant, upper level English words and sentences. The translation should be natural, easy to understand, and concise. Keep the meaning same, but make them more literary. I want you to only reply the correction, the improvements and nothing else, do not write explanations.",
+    "shell": "Return a one-line bash command with the functionality I will describe. Return ONLY the command ready to run in the terminal. The command should do the following:"
+  },
+  "conversation": {
+    "prompt": "default",
+    "context_length": 6,
+    "model": "gpt-3.5-turbo",
+    "stream": true,
+    "temperature": 1,
+    "max_tokens": 1024
+  }
+}

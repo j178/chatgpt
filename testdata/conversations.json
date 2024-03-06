@@ -1,0 +1,23 @@
+{
+  "conversations": [
+    {
+      "config": {
+        "provider": "openai-1",
+        "model": "gpt-3.5-turbo",
+        "prompt": "default",
+        "context_length": 6,
+        "stream": true,
+        "temperature": 1,
+        "max_tokens": 1024
+      },
+      "forgotten": [],
+      "context": [
+        {
+          "question": "Generate a piece of test text around 500 words, containing 5 more languages. Each language in a seperate line.",
+          "answer": "Sure! Here's a piece of test text with 5 different languages in separate lines:\n\nEnglish:\nThe English language is widely spoken and understood around the world, making it an important tool for communication in many contexts.\n\nSpanish:\nEl idioma español es hablado en muchos países y es conocido por su belleza y diversidad. Aprender español puede abrir puertas a nuevas oportunidades.\n\nFrench:\nLa langue française est réputée pour être élégante et romantique. Elle est parlée dans de nombreux pays et est considérée comme une langue internationale.\n\nGerman:\nDie deutsche Sprache hat eine lange Geschichte und wird in Deutschland, Österreich und der Schweiz gesprochen. Sie gilt als eine der wichtigsten Sprachen Europas.\n\nJapanese:\n日本語は難しいかもしれませんが、日本文化やアニメ、マンガに興味がある人にとって、学ぶ価値がある言語です。\n\nItalian:\nL'italiano è una lingua romantica, con una storia ricca. È parlato in Italia e in alcune parti della Svizzera, ed è famoso per la sua cucina deliziosa.\n\nPlease note that the length of the text provided here may not be exactly 500 words, but it contains five different languages as requested."
+        }
+      ]
+    }
+  ],
+  "last_idx": 0
+}

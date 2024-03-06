@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -26,15 +27,18 @@ import (
 )
 
 type (
-	errMsg         error
-	deltaAnswerMsg string
-	answerMsg      string
-	saveMsg        struct{}
+	errMsg    error
+	answerMsg struct {
+		content string
+		done    bool
+	}
+	saveMsg struct{}
 )
 
 var (
 	Debug      bool
 	DetachMode bool
+	Program    *tea.Program
 )
 
 type Model struct {
@@ -49,14 +53,14 @@ type Model struct {
 	textarea      textarea.Model
 	help          help.Model
 	spin          spinner.Model
-	globalConf    chatgpt.GlobalConfig
+	conf          *chatgpt.GlobalConfig
 	chatgpt       *chatgpt.ChatGPT
 	conversations *chatgpt.ConversationManager
 	renderer      *glamour.TermRenderer
 }
 
 func InitialModel(
-	conf chatgpt.GlobalConfig,
+	conf *chatgpt.GlobalConfig,
 	chatgpt *chatgpt.ChatGPT,
 	conversations *chatgpt.ConversationManager,
 ) Model {
@@ -89,7 +93,7 @@ func InitialModel(
 		viewport:      vp,
 		help:          help.New(),
 		spin:          spin,
-		globalConf:    conf,
+		conf:          conf,
 		chatgpt:       chatgpt,
 		conversations: conversations,
 		historyIdx:    conversations.Curr().Len(),
@@ -131,6 +135,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// TODO copy without space padding
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		if msg.Width == 0 || msg.Height == 0 {
+			break
+		}
 		m.width = msg.Width
 		m.height = msg.Height
 		m.help.Width = msg.Width
@@ -162,17 +169,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(
 				cmds,
 				func() tea.Msg {
-					content, hasMore, err := m.chatgpt.Send(
+					_, err := m.chatgpt.Send(
+						context.Background(),
 						m.conversations.Curr().Config,
 						m.conversations.Curr().GetContextMessages(),
+						func(chunk []byte, done bool) {
+							Program.Send(answerMsg{content: string(chunk), done: done})
+						},
 					)
 					if err != nil {
 						return errMsg(err)
 					}
-					if hasMore {
-						return deltaAnswerMsg(content)
-					}
-					return answerMsg(content)
+					return nil
 				},
 			)
 			// Start answer spinner
@@ -194,7 +202,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.err = nil
 			// TODO change config when creating new conversation
-			m.conversations.New(m.globalConf.Conversation)
+			m.conversations.New(m.conf.DefaultConversation)
 			m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 			m.viewport.GotoBottom()
 			m.historyIdx = 0
@@ -275,28 +283,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 		}
-	case deltaAnswerMsg:
-		m.conversations.Curr().UpdatePending(string(msg), false)
-		cmds = append(
-			cmds, func() tea.Msg {
-				content, err := m.chatgpt.Recv()
-				if err != nil {
-					return errMsg(err)
-				}
-				return deltaAnswerMsg(content)
-			},
-		)
-		m.err = nil
-		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
-		m.viewport.GotoBottom()
 	case answerMsg:
-		m.conversations.Curr().UpdatePending(string(msg), true)
-		m.answering = false
-		m.chatgpt.Done()
+		m.conversations.Curr().UpdatePending(msg.content, msg.done)
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
-		m.textarea.Placeholder = "Send a message..."
-		m.textarea.Focus()
+		m.err = nil
+		if msg.done {
+			m.answering = false
+			m.textarea.Placeholder = "Send a message..."
+			m.textarea.Focus()
+		}
 	case saveMsg:
 		_ = m.conversations.Dump()
 		cmds = append(cmds, savePeriodically())
@@ -311,7 +307,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.answering = false
 		m.conversations.Curr().UpdatePending("", true)
-		m.chatgpt.Done()
 		m.viewport.SetContent(m.RenderConversation(m.viewport.Width))
 		m.viewport.GotoBottom()
 		m.textarea.Placeholder = "Send a message..."
@@ -322,7 +317,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) SetInputMode(mode InputMode) Model {
-	keys := m.globalConf.KeyMap
+	keys := m.conf.KeyMap
 	if mode == InputModelMultiLine {
 		m.keymap.SwitchMultiline = newBinding(keys.SwitchMultiline, "single line mode")
 		m.keymap.Submit = newBinding(keys.MultilineSubmit, "submit")
@@ -455,7 +450,7 @@ func (m Model) RenderFooter() string {
 	// truncate last column
 	if totalWidth+(n-1)*padding > m.width {
 		w := lipgloss.Width(strings.Join(columns[:n-1], ""))
-		remainingSpace := m.width - (w + (n-2)*padding + len("..."))
+		remainingSpace := m.width - (w + (n-1)*padding + len("..."))
 		columns[n-1] = columns[n-1][:remainingSpace] + "..."
 	}
 
