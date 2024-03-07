@@ -41,20 +41,25 @@ func New(conf *GlobalConfig) (*ChatGPT, error) {
 func newOpenAI(kvs map[string]any) (*openai.LLM, error) {
 	var opts []openai.Option
 	for k, v := range kvs {
+		v, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid value type for key %s", k)
+		}
 		switch k {
-		// TODO fix potential type conversion issue
 		case "api_key":
-			opts = append(opts, openai.WithToken(v.(string)))
+			opts = append(opts, openai.WithToken(v))
 		case "base_url":
-			opts = append(opts, openai.WithBaseURL(v.(string)))
+			opts = append(opts, openai.WithBaseURL(v))
 		case "organization":
-			opts = append(opts, openai.WithOrganization(v.(string)))
+			opts = append(opts, openai.WithOrganization(v))
 		case "api_type":
-			opts = append(opts, openai.WithAPIType(openai.APIType(v.(string))))
+			opts = append(opts, openai.WithAPIType(openai.APIType(v)))
 		case "api_version":
-			opts = append(opts, openai.WithAPIVersion(v.(string)))
+			opts = append(opts, openai.WithAPIVersion(v))
 		case "model":
-			opts = append(opts, openai.WithModel(v.(string)))
+			// For OpenAI, model in provider level is a default parameter for conversations.
+			// For Azure, this is the deployment name, and ignored in conversation.
+			opts = append(opts, openai.WithModel(v))
 		}
 	}
 	return openai.New(opts...)
@@ -64,9 +69,13 @@ func newOpenAI(kvs map[string]any) (*openai.LLM, error) {
 func newGoogleAI(kvs map[string]any) (*googleai.GoogleAI, error) {
 	var opts []googleai.Option
 	for k, v := range kvs {
+		v, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid value type for key %s", k)
+		}
 		switch k {
 		case "api_key":
-			opts = append(opts, googleai.WithAPIKey(v.(string)))
+			opts = append(opts, googleai.WithAPIKey(v))
 			// case "base_url":
 			// 	opts = append(opts, googleai.WithBaseURL(v.(string)))
 			// case "api_type":

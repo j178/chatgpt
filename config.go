@@ -249,6 +249,10 @@ func readConfig() (*GlobalConfig, error) {
 
 func writeConfig(conf *GlobalConfig) error {
 	path := ConfigFile()
+	err := CreateIfNotExists(path, false)
+	if err != nil {
+		return fmt.Errorf("failed to create config file: %w", err)
+	}
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to open config file: %w", err)
