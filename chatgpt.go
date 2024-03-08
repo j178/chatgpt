@@ -2,154 +2,257 @@ package chatgpt
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"regexp"
+	"strings"
 
-	"github.com/avast/retry-go"
-	"github.com/sashabaranov/go-openai"
+	"github.com/j178/llms/llms"
+	"github.com/j178/llms/llms/anthropic"
+	"github.com/j178/llms/llms/cohere"
+	"github.com/j178/llms/llms/ernie"
+	"github.com/j178/llms/llms/googleai"
+	"github.com/j178/llms/llms/huggingface"
+	"github.com/j178/llms/llms/ollama"
+	"github.com/j178/llms/llms/openai"
+	"github.com/j178/llms/schema"
 )
 
 type ChatGPT struct {
-	globalConf GlobalConfig
-	client     *openai.Client
-	stream     *openai.ChatCompletionStream
+	conf *GlobalConfig
+	llms map[string]llms.Model
 }
 
-func NewChatGPT(conf GlobalConfig) *ChatGPT {
-	var cc openai.ClientConfig
-	switch conf.APIType {
-	case openai.APITypeOpenAI:
-		cc = openai.DefaultConfig(conf.APIKey)
-		if conf.Endpoint != "" {
-			cc.BaseURL = conf.Endpoint
+func New(conf *GlobalConfig) (*ChatGPT, error) {
+	providers := make(map[string]llms.Model)
+	for _, p := range conf.Providers {
+		var (
+			err error
+			llm llms.Model
+		)
+		switch p.Type {
+		case ProviderOpenAI:
+			llm, err = newOpenAI(p.KVs)
+		case ProviderGemini:
+			llm, err = newGemini(p.KVs)
+		case ProviderClaude:
+			llm, err = newClaude(p.KVs)
+		case ProviderOllama:
+			llm, err = newOllama(p.KVs)
+		case ProviderCohere:
+			llm, err = newCohere(p.KVs)
+		case ProviderHuggingFace:
+			llm, err = newHuggingFace(p.KVs)
+		case ProviderErnie:
+			llm, err = newErnie(p.KVs)
 		}
-	case openai.APITypeAzure, openai.APITypeAzureAD:
-		cc = openai.DefaultAzureConfig(conf.APIKey, conf.Endpoint)
-		if conf.APIVersion != "" {
-			cc.APIVersion = conf.APIVersion
+		if err != nil {
+			return nil, err
 		}
-		cc.AzureModelMapperFunc = func(model string) string {
-			m, ok := conf.ModelMapping[model]
-			if ok {
-				return m
-			}
-			// Fallback to use model name (without . or : ) as deployment name.
-			return regexp.MustCompile(`[.:]`).ReplaceAllString(model, "")
-		}
-	default:
-		panic(fmt.Sprintf("unknown API type: %s", conf.APIType))
+		providers[p.Name] = llm
 	}
-	cc.OrgID = conf.OrgID
-	client := openai.NewClientWithConfig(cc)
-	return &ChatGPT{globalConf: conf, client: client}
+
+	return &ChatGPT{conf: conf, llms: providers}, nil
 }
 
-func (c *ChatGPT) Ask(conf ConversationConfig, question string, out io.Writer) error {
-	req := openai.ChatCompletionRequest{
-		Model: conf.Model,
-		Messages: []openai.ChatCompletionMessage{
-			{Role: openai.ChatMessageRoleSystem, Content: c.globalConf.LookupPrompt(conf.Prompt)},
-			{Role: openai.ChatMessageRoleUser, Content: question},
+func collectOpts[T any](kvs map[string]any, optFuncs map[string]func(string) T) ([]T, error) {
+	var opts []T
+	for k, v := range kvs {
+		v, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid value type for key %s", k)
+		}
+		if f, ok := optFuncs[k]; ok {
+			opts = append(opts, f(v))
+		}
+	}
+	return opts, nil
+}
+
+func newOpenAI(kvs map[string]any) (*openai.LLM, error) {
+	optFuncs := map[string]func(string) openai.Option{
+		"api_key":      openai.WithToken,
+		"base_url":     openai.WithBaseURL,
+		"organization": openai.WithOrganization,
+		"api_type": func(s string) openai.Option {
+			return openai.WithAPIType(openai.APIType(strings.ToUpper(s)))
 		},
-		MaxTokens:   conf.MaxTokens,
-		Temperature: conf.Temperature,
-		N:           1,
+		"api_version":   openai.WithAPIVersion,
+		"default_model": openai.WithModel,
+		"deployment":    openai.WithDeploymentName,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	return openai.New(opts...)
+}
+
+func newClaude(kvs map[string]any) (*anthropic.LLM, error) {
+	optFuncs := map[string]func(string) anthropic.Option{
+		"api_key":       anthropic.WithToken,
+		"default_model": anthropic.WithModel,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	return anthropic.New(opts...)
+}
+
+func newOllama(kvs map[string]any) (*ollama.LLM, error) {
+	optFuncs := map[string]func(string) ollama.Option{
+		"base_url":      ollama.WithServerURL,
+		"default_model": ollama.WithModel,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	return ollama.New(opts...)
+}
+
+func newGemini(kvs map[string]any) (*googleai.GoogleAI, error) {
+	optFuncs := map[string]func(string) googleai.Option{
+		"api_key":       googleai.WithAPIKey,
+		"default_model": googleai.WithDefaultModel,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	return googleai.New(context.Background(), opts...)
+}
+
+func newCohere(kvs map[string]any) (*cohere.LLM, error) {
+	optFuncs := map[string]func(string) cohere.Option{
+		"api_key":       cohere.WithToken,
+		"base_url":      cohere.WithBaseURL,
+		"default_model": cohere.WithModel,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	return cohere.New(opts...)
+}
+
+func newHuggingFace(kvs map[string]any) (*huggingface.LLM, error) {
+	optFuncs := map[string]func(string) huggingface.Option{
+		"api_key":       huggingface.WithToken,
+		"base_url":      huggingface.WithURL,
+		"default_model": huggingface.WithModel,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	return huggingface.New(opts...)
+}
+
+func newErnie(kvs map[string]any) (*ernie.LLM, error) {
+	optFuncs := map[string]func(string) ernie.Option{
+		"access_token": ernie.WithAccessToken,
+		"default_model": func(s string) ernie.Option {
+			return ernie.WithModelName(ernie.ModelName(s))
+		},
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	apiKey, err := getStr(kvs, "api_key")
+	if err != nil {
+		return nil, err
+	}
+	secretKey, err := getStr(kvs, "secret_key")
+	if err != nil {
+		return nil, err
+	}
+	opts = append(opts, ernie.WithAKSK(apiKey, secretKey))
+
+	return ernie.New(opts...)
+}
+
+func makeMessage(role schema.ChatMessageType, msg string) llms.MessageContent {
+	return llms.MessageContent{
+		Role:  role,
+		Parts: []llms.ContentPart{llms.TextPart(msg)},
+	}
+}
+
+func (c *ChatGPT) Ask(ctx context.Context, conf ConversationConfig, question string, out io.Writer) error {
+	llm := c.llms[conf.Provider]
+	if llm == nil {
+		return fmt.Errorf("unknown provider: %s", conf.Provider)
+	}
+
+	messages := []llms.MessageContent{
+		makeMessage(schema.ChatMessageTypeSystem, c.conf.LookupPrompt(conf.Prompt)),
+		makeMessage(schema.ChatMessageTypeHuman, question),
+	}
+	opts := []llms.CallOption{
+		llms.WithModel(conf.Model),
+		llms.WithMaxTokens(conf.MaxTokens),
+		llms.WithTemperature(conf.Temperature),
+		llms.WithN(1),
 	}
 	if conf.Stream {
-		stream, err := c.client.CreateChatCompletionStream(context.Background(), req)
-		if err != nil {
-			return err
-		}
-		defer stream.Close()
-		for {
-			resp, err := stream.Recv()
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					_, _ = fmt.Fprintln(out)
-					break
-				}
-				return err
-			}
-			content := resp.Choices[0].Delta.Content
-			_, _ = fmt.Fprint(out, content)
-		}
-	} else {
-		resp, err := c.client.CreateChatCompletion(context.Background(), req)
-		if err != nil {
-			return err
-		}
-		content := resp.Choices[0].Message.Content
-		_, _ = fmt.Fprintln(out, content)
+		opts = append(
+			opts, llms.WithStreamingFunc(
+				func(ctx context.Context, chunk []byte) error {
+					_, err := out.Write(chunk)
+					return err
+				},
+			),
+		)
+	}
+
+	content, err := llm.GenerateContent(ctx, messages, opts...)
+	if err != nil {
+		return err
+	}
+	if !conf.Stream {
+		_, err = out.Write([]byte(content.Choices[0].Content))
 	}
 	return nil
 }
 
-func (c *ChatGPT) Send(conf ConversationConfig, messages []openai.ChatCompletionMessage) (
-	msg string,
-	hasMore bool,
-	err error,
-) {
-	err = retry.Do(
-		func() error {
-			req := openai.ChatCompletionRequest{
-				Model:       conf.Model,
-				Messages:    messages,
-				MaxTokens:   conf.MaxTokens,
-				Temperature: conf.Temperature,
-				N:           1,
-			}
-			if conf.Stream {
-				stream, err := c.client.CreateChatCompletionStream(context.Background(), req)
-				c.stream = stream
-				if err != nil {
-					return err
-				}
-				resp, err := stream.Recv()
-				if err != nil {
-					return err
-				}
-				if len(resp.Choices) > 0 {
-					msg = resp.Choices[0].Delta.Content
-				}
-				hasMore = true
-			} else {
-				resp, err := c.client.CreateChatCompletion(context.Background(), req)
-				if err != nil {
-					return err
-				}
-				if len(resp.Choices) > 0 {
-					msg = resp.Choices[0].Message.Content
-				}
-				hasMore = false
-			}
-			return nil
-		},
-		retry.Attempts(3),
-		retry.LastErrorOnly(true),
-	)
-	if err != nil {
-		return "", false, err
+func (c *ChatGPT) Send(
+	ctx context.Context,
+	conf ConversationConfig,
+	messages []llms.MessageContent,
+	stream func(chunk []byte, done bool),
+) (string, error) {
+	llm := c.llms[conf.Provider]
+	if llm == nil {
+		return "", fmt.Errorf("unknown provider: %s", conf.Provider)
 	}
-	return
-}
 
-func (c *ChatGPT) Recv() (string, error) {
-	resp, err := c.stream.Recv()
+	opts := []llms.CallOption{
+		llms.WithModel(conf.Model),
+		llms.WithMaxTokens(conf.MaxTokens),
+		llms.WithTemperature(conf.Temperature),
+		llms.WithN(1),
+	}
+	if conf.Stream {
+		opts = append(
+			opts, llms.WithStreamingFunc(
+				func(ctx context.Context, chunk []byte) error {
+					stream(chunk, false)
+					return nil
+				},
+			),
+		)
+	}
+	resp, err := llm.GenerateContent(ctx, messages, opts...)
 	if err != nil {
 		return "", err
 	}
-	if len(resp.Choices) == 0 {
+	if conf.Stream {
+		stream(nil, true)
 		return "", nil
+	} else {
+		stream([]byte(resp.Choices[0].Content), true)
+		return resp.Choices[0].Content, nil
 	}
-	content := resp.Choices[0].Delta.Content
-	return content, nil
-}
-
-func (c *ChatGPT) Done() {
-	if c.stream != nil {
-		c.stream.Close()
-	}
-	c.stream = nil
 }

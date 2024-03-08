@@ -15,6 +15,7 @@ func init() {
 }
 
 func getEncoding(model string) (*tiktoken.Tiktoken, error) {
+	// TODO: support non-openai models
 	enc, ok := encodings[model]
 	if !ok {
 		var err error

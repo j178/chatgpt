@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -50,10 +51,14 @@ func main() {
 
 	// Set default prompt (for new conversations)
 	if *promptKey != "" {
-		conf.Conversation.Prompt = *promptKey
+		conf.DefaultConversation.Prompt = *promptKey
 	}
 
-	bot := chatgpt.NewChatGPT(conf)
+	bot, err := chatgpt.New(conf)
+	if err != nil {
+		exit(err)
+	}
+
 	// One-time ask-and-response mode
 	args := flag.Args()
 	pipeIn := !isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd())
@@ -69,8 +74,8 @@ func main() {
 			question = strings.Join(args, " ")
 		}
 
-		conversationConf := conf.Conversation
-		err := bot.Ask(conversationConf, question, os.Stdout)
+		conversationConf := conf.DefaultConversation
+		err := bot.Ask(context.Background(), conversationConf, question, os.Stdout)
 		if err != nil {
 			exit(err)
 		}
@@ -93,30 +98,32 @@ func main() {
 		defer func() { _ = lockFile.Unlock() }()
 	}
 
-	conversations, err := chatgpt.NewConversationManager(conf, chatgpt.ConversationHistoryFile())
+	conversations, err := chatgpt.NewConversationManager(conf, chatgpt.ConversationsFile())
 	if err != nil {
 		exit(err)
 	}
 
 	if *startNewConversation {
-		conversations.New(conf.Conversation)
+		conversations.New(conf.DefaultConversation)
 	} else if *promptKey != "" {
 		// If prompt is specified, try to find conversation with the same prompt.
 		// If not found, start a new conversation
 		conv := conversations.FindByPrompt(*promptKey)
 		if conv == nil {
-			conversations.New(conf.Conversation)
+			conversations.New(conf.DefaultConversation)
 		} else {
 			conversations.SetCurr(conv)
 		}
 	}
 
+	m := ui.InitialModel(conf, bot, conversations)
 	p := tea.NewProgram(
-		ui.InitialModel(conf, bot, conversations),
+		m,
 		// enable mouse motion will make text not able to select
 		// tea.WithMouseCellMotion(),
 		tea.WithAltScreen(),
 	)
+	ui.Program = p
 	if debug {
 		f, _ := tea.LogToFile("chatgpt.log", "")
 		defer func() { _ = f.Close() }()
