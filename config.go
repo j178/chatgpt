@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 
+	"github.com/iancoleman/orderedmap"
 	"github.com/j178/llms/llms/openai"
 	"github.com/mitchellh/go-homedir"
 )
@@ -20,25 +22,29 @@ const defaultModel = "gpt-3.5-turbo"
 type ProviderType string
 
 const (
-	// TODO add more providers
-	ProviderOpenAI ProviderType = "openai"
-	ProviderGemini ProviderType = "gemini"
-	ProviderClaude ProviderType = "claude"
-	ProviderCohere ProviderType = "cohere"
+	ProviderOpenAI      ProviderType = "openai"
+	ProviderGemini      ProviderType = "gemini"
+	ProviderClaude      ProviderType = "claude"
+	ProviderOllama      ProviderType = "ollama"
+	ProviderCohere      ProviderType = "cohere"
+	ProviderErnie       ProviderType = "ernie"
+	ProviderHuggingFace ProviderType = "huggingface"
 )
 
 type ProviderConfig struct {
-	Name string         `json:"name"`
-	Type ProviderType   `json:"type"`
-	KVs  map[string]any `json:"-"`
+	Name string
+	Type ProviderType
+	KVs  map[string]any
 }
 
 func (c *ProviderConfig) MarshalJSON() ([]byte, error) {
-	kvs := make(map[string]any)
-	kvs["type"] = string(c.Type)
-	kvs["name"] = c.Name
+	kvs := orderedmap.New()
+	kvs.Set("type", string(c.Type))
+	kvs.Set("name", c.Name)
 	for k, v := range c.KVs {
-		kvs[k] = v
+		if !reflect.ValueOf(v).IsZero() {
+			kvs.Set(k, v)
+		}
 	}
 	return json.Marshal(kvs)
 }
@@ -297,7 +303,7 @@ func migrateV1Config(data []byte) error {
 		return err
 	}
 
-	modelKey := "model"
+	modelKey := "default_model"
 	model := v0.Conversation.Model
 	azure := isAzure(v0.APIType)
 	if azure {

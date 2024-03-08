@@ -7,7 +7,12 @@ import (
 	"strings"
 
 	"github.com/j178/llms/llms"
+	"github.com/j178/llms/llms/anthropic"
+	"github.com/j178/llms/llms/cohere"
+	"github.com/j178/llms/llms/ernie"
 	"github.com/j178/llms/llms/googleai"
+	"github.com/j178/llms/llms/huggingface"
+	"github.com/j178/llms/llms/ollama"
 	"github.com/j178/llms/llms/openai"
 	"github.com/j178/llms/schema"
 )
@@ -28,7 +33,17 @@ func New(conf *GlobalConfig) (*ChatGPT, error) {
 		case ProviderOpenAI:
 			llm, err = newOpenAI(p.KVs)
 		case ProviderGemini:
-			llm, err = newGoogleAI(p.KVs)
+			llm, err = newGemini(p.KVs)
+		case ProviderClaude:
+			llm, err = newClaude(p.KVs)
+		case ProviderOllama:
+			llm, err = newOllama(p.KVs)
+		case ProviderCohere:
+			llm, err = newCohere(p.KVs)
+		case ProviderHuggingFace:
+			llm, err = newHuggingFace(p.KVs)
+		case ProviderErnie:
+			llm, err = newErnie(p.KVs)
 		}
 		if err != nil {
 			return nil, err
@@ -39,19 +54,8 @@ func New(conf *GlobalConfig) (*ChatGPT, error) {
 	return &ChatGPT{conf: conf, llms: providers}, nil
 }
 
-func newOpenAI(kvs map[string]any) (*openai.LLM, error) {
-	var opts []openai.Option
-	optFuncs := map[string]func(string) openai.Option{
-		"api_key":      openai.WithToken,
-		"base_url":     openai.WithBaseURL,
-		"organization": openai.WithOrganization,
-		"api_type": func(s string) openai.Option {
-			return openai.WithAPIType(openai.APIType(strings.ToUpper(s)))
-		},
-		"api_version": openai.WithAPIVersion,
-		"model":       openai.WithModel,
-		"deployment":  openai.WithDeploymentName,
-	}
+func collectOpts[T any](kvs map[string]any, optFuncs map[string]func(string) T) ([]T, error) {
+	var opts []T
 	for k, v := range kvs {
 		v, ok := v.(string)
 		if !ok {
@@ -61,32 +65,112 @@ func newOpenAI(kvs map[string]any) (*openai.LLM, error) {
 			opts = append(opts, f(v))
 		}
 	}
+	return opts, nil
+}
 
+func newOpenAI(kvs map[string]any) (*openai.LLM, error) {
+	optFuncs := map[string]func(string) openai.Option{
+		"api_key":      openai.WithToken,
+		"base_url":     openai.WithBaseURL,
+		"organization": openai.WithOrganization,
+		"api_type": func(s string) openai.Option {
+			return openai.WithAPIType(openai.APIType(strings.ToUpper(s)))
+		},
+		"api_version":   openai.WithAPIVersion,
+		"default_model": openai.WithModel,
+		"deployment":    openai.WithDeploymentName,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
 	return openai.New(opts...)
 }
 
-// TODO 搞清楚 GoogleAI, Vertex, Palm 的区别
-func newGoogleAI(kvs map[string]any) (*googleai.GoogleAI, error) {
-	var opts []googleai.Option
-	for k, v := range kvs {
-		v, ok := v.(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid value type for key %s", k)
-		}
-		switch k {
-		case "api_key":
-			opts = append(opts, googleai.WithAPIKey(v))
-			// case "base_url":
-			// 	opts = append(opts, googleai.WithBaseURL(v.(string)))
-			// case "api_type":
-			// 	opts = append(opts, googleai.WithAPIType(googleai.APIType(v.(string))))
-			// case "api_version":
-			// 	opts = append(opts, googleai.WithAPIVersion(v.(string)))
-			// case "model":
-			// 	opts = append(opts, googleai.WithModel(v.(string)))
-		}
+func newClaude(kvs map[string]any) (*anthropic.LLM, error) {
+	optFuncs := map[string]func(string) anthropic.Option{
+		"api_key":       anthropic.WithToken,
+		"default_model": anthropic.WithModel,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	return anthropic.New(opts...)
+}
+
+func newOllama(kvs map[string]any) (*ollama.LLM, error) {
+	optFuncs := map[string]func(string) ollama.Option{
+		"base_url":      ollama.WithServerURL,
+		"default_model": ollama.WithModel,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	return ollama.New(opts...)
+}
+
+func newGemini(kvs map[string]any) (*googleai.GoogleAI, error) {
+	optFuncs := map[string]func(string) googleai.Option{
+		"api_key":       googleai.WithAPIKey,
+		"default_model": googleai.WithDefaultModel,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
 	}
 	return googleai.New(context.Background(), opts...)
+}
+
+func newCohere(kvs map[string]any) (*cohere.LLM, error) {
+	optFuncs := map[string]func(string) cohere.Option{
+		"api_key":       cohere.WithToken,
+		"base_url":      cohere.WithBaseURL,
+		"default_model": cohere.WithModel,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	return cohere.New(opts...)
+}
+
+func newHuggingFace(kvs map[string]any) (*huggingface.LLM, error) {
+	optFuncs := map[string]func(string) huggingface.Option{
+		"api_key":       huggingface.WithToken,
+		"base_url":      huggingface.WithURL,
+		"default_model": huggingface.WithModel,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	return huggingface.New(opts...)
+}
+
+func newErnie(kvs map[string]any) (*ernie.LLM, error) {
+	optFuncs := map[string]func(string) ernie.Option{
+		"access_token": ernie.WithAccessToken,
+		"default_model": func(s string) ernie.Option {
+			return ernie.WithModelName(ernie.ModelName(s))
+		},
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	apiKey, err := getStr(kvs, "api_key")
+	if err != nil {
+		return nil, err
+	}
+	secretKey, err := getStr(kvs, "secret_key")
+	if err != nil {
+		return nil, err
+	}
+	opts = append(opts, ernie.WithAKSK(apiKey, secretKey))
+
+	return ernie.New(opts...)
 }
 
 func makeMessage(role schema.ChatMessageType, msg string) llms.MessageContent {
