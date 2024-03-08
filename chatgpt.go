@@ -168,6 +168,7 @@ func (c *ChatGPT) Send(
 		stream(nil, true)
 		return "", nil
 	} else {
+		stream([]byte(resp.Choices[0].Content), true)
 		return resp.Choices[0].Content, nil
 	}
 }
