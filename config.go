@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/j178/llms/llms/openai"
 	"github.com/mitchellh/go-homedir"
@@ -42,16 +43,16 @@ func (c *ProviderConfig) MarshalJSON() ([]byte, error) {
 	return json.Marshal(kvs)
 }
 
-func getStr(kvs map[string]any, key string) string {
+func getStr(kvs map[string]any, key string) (string, error) {
 	v, ok := kvs[key]
 	if !ok {
-		return ""
+		return "", nil
 	}
 	s, ok := v.(string)
 	if !ok {
-		return ""
+		return "", fmt.Errorf("invalid value type for key %s, expected string", key)
 	}
-	return s
+	return s, nil
 }
 
 func (c *ProviderConfig) UnmarshalJSON(data []byte) error {
@@ -60,8 +61,15 @@ func (c *ProviderConfig) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	c.Type = ProviderType(getStr(kvs, "type"))
-	c.Name = getStr(kvs, "name")
+	ty, err := getStr(kvs, "type")
+	if err != nil {
+		return err
+	}
+	c.Type = ProviderType(ty)
+	c.Name, err = getStr(kvs, "name")
+	if err != nil {
+		return err
+	}
 	delete(kvs, "type")
 	delete(kvs, "name")
 
@@ -71,7 +79,7 @@ func (c *ProviderConfig) UnmarshalJSON(data []byte) error {
 
 type ConversationConfig struct {
 	Provider      string  `json:"provider"`
-	Model         string  `json:"model"`
+	Model         string  `json:"model,omitempty"`
 	Prompt        string  `json:"prompt"`
 	ContextLength int     `json:"context_length"`
 	Stream        bool    `json:"stream"`
@@ -268,6 +276,7 @@ func writeConfig(conf *GlobalConfig) error {
 }
 
 func isAzure(apiType openai.APIType) bool {
+	apiType = openai.APIType(strings.ToUpper(string(apiType)))
 	return apiType == openai.APITypeAzure || apiType == openai.APITypeAzureAD
 }
 
@@ -288,13 +297,18 @@ func migrateV1Config(data []byte) error {
 		return err
 	}
 
+	modelKey := "model"
 	model := v0.Conversation.Model
 	azure := isAzure(v0.APIType)
 	if azure {
+		// For azure, in new version, instead of mapping model to deployment,
+		// we use explicit deployment parameter, and model is not used at all.
+		modelKey = "deployment"
 		model = convertModelToAzureDeployment(model, v0.ModelMapping)
+		v0.Conversation.Model = ""
 	}
-	v0.Conversation.Model = model
 	v0.Conversation.Provider = defaultProviderName
+	v0.APIType = openai.APIType(strings.ToUpper(string(v0.APIType)))
 	conf.Version = currentConfigVersion
 	conf.Prompts = v0.Prompts
 	conf.DefaultConversation = v0.Conversation
@@ -309,6 +323,7 @@ func migrateV1Config(data []byte) error {
 				"api_type":     v0.APIType,
 				"api_version":  v0.APIVersion,
 				"organization": v0.OrgID,
+				modelKey:       model,
 			},
 		},
 	}
@@ -328,7 +343,8 @@ func migrateV1Config(data []byte) error {
 	for _, conv := range conversations.Conversations {
 		conv.Config.Provider = defaultProviderName
 		if azure {
-			conv.Config.Model = convertModelToAzureDeployment(conv.Config.Model, v0.ModelMapping)
+			// For azure, we use `deployment` in new version, `model` is no effect.
+			conv.Config.Model = ""
 		}
 	}
 	err = conversations.Dump()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/j178/llms/llms"
 	"github.com/j178/llms/llms/googleai"
@@ -40,28 +41,27 @@ func New(conf *GlobalConfig) (*ChatGPT, error) {
 
 func newOpenAI(kvs map[string]any) (*openai.LLM, error) {
 	var opts []openai.Option
+	optFuncs := map[string]func(string) openai.Option{
+		"api_key":      openai.WithToken,
+		"base_url":     openai.WithBaseURL,
+		"organization": openai.WithOrganization,
+		"api_type": func(s string) openai.Option {
+			return openai.WithAPIType(openai.APIType(strings.ToUpper(s)))
+		},
+		"api_version": openai.WithAPIVersion,
+		"model":       openai.WithModel,
+		"deployment":  openai.WithDeploymentName,
+	}
 	for k, v := range kvs {
 		v, ok := v.(string)
 		if !ok {
 			return nil, fmt.Errorf("invalid value type for key %s", k)
 		}
-		switch k {
-		case "api_key":
-			opts = append(opts, openai.WithToken(v))
-		case "base_url":
-			opts = append(opts, openai.WithBaseURL(v))
-		case "organization":
-			opts = append(opts, openai.WithOrganization(v))
-		case "api_type":
-			opts = append(opts, openai.WithAPIType(openai.APIType(v)))
-		case "api_version":
-			opts = append(opts, openai.WithAPIVersion(v))
-		case "model":
-			// For OpenAI, model in provider level is a default parameter for conversations.
-			// For Azure, this is the deployment name, and ignored in conversation.
-			opts = append(opts, openai.WithModel(v))
+		if f, ok := optFuncs[k]; ok {
+			opts = append(opts, f(v))
 		}
 	}
+
 	return openai.New(opts...)
 }
 
