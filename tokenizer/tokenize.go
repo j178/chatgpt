@@ -5,59 +5,29 @@ import (
 	"github.com/j178/tiktoken-go"
 )
 
-func CountTokens(model, text string) int {
-	enc, err := tiktoken.ForModel(model)
+const countAsModel = "gpt-4"
+
+func CountTokens(text string) int {
+	enc, err := tiktoken.ForModel(countAsModel)
 	if err != nil {
-		panic(err)
+		return 0
 	}
-	cnt, err := enc.Count(text)
-	if err != nil {
-		panic(err)
-	}
+	cnt, _ := enc.Count(text)
 	return cnt
 }
 
 // CountMessagesTokens based on https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
-func CountMessagesTokens(model string, messages []llms.MessageContent) int {
-	var (
-		tokens           int
-		tokensPerMessage int
-		tokensPerName    int
-	)
-
-	switch model {
-	case "gpt-3.5-turbo-0613",
-		"gpt-3.5-turbo-16k-0613",
-		"gpt-4-0314",
-		"gpt-4-32k-0314",
-		"gpt-4-0613",
-		"gpt-4-32k-0613":
-		tokensPerMessage = 3
-		tokensPerName = 1
-	case "gpt-3.5-turbo-0301":
-		tokensPerMessage = 4 // every message follows <|start|>{role/name}\n{content}<|end|>\n
-		tokensPerName = -1   // if there's a name, the role is omitted
-	case "gpt-3.5-turbo":
-		// gpt-3.5-turbo may update over time. Returning num tokens assuming gpt-3.5-turbo-0613.
-		return CountMessagesTokens("gpt-3.5-turbo-0613", messages)
-	case "gpt-4":
-		// gpt-4 may update over time. Returning num tokens assuming gpt-4-0613
-		return CountMessagesTokens("gpt-4-0613", messages)
-	default:
-		// not implemented
-		return 0
-	}
-
-	for _ = range messages {
-		tokens += tokensPerMessage
-		// if _, ok := messages[k].
-		//
-		// 	tokens += CountTokens(model, messages[k].Role)
-		// 	tokens += CountTokens(model, messages[k].Content)
-		// 	tokens += CountTokens(model, messages[k].Name)
-		// 	if messages[k].Name != "" {
-		tokens += tokensPerName
-		// 	}
+// But simplified to only count as GPT-4 series models.
+func CountMessagesTokens(messages []llms.MessageContent) (tokens int) {
+	for _, message := range messages {
+		tokens += 3
+		tokens += CountTokens(string(message.Role))
+		for _, part := range message.Parts {
+			// TODO how to count binary and image URL parts?
+			if text, ok := part.(llms.TextContent); ok {
+				tokens += CountTokens(text.Text)
+			}
+		}
 	}
 
 	tokens += 3 // every reply is primed with <|start|>assistant<|message|>

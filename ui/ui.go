@@ -424,7 +424,7 @@ func (m Model) RenderFooter() string {
 	if m.conversations.Curr().Len() > 0 || len(question) > 0 {
 		tokens := m.conversations.Curr().GetContextTokens()
 		if len(question) > 0 {
-			tokens += tokenizer.CountTokens(m.conversations.Curr().Config.Model, question) + 5
+			tokens += tokenizer.CountTokens(question) + 5
 		}
 		columns = append(columns, fmt.Sprintf("%s %d", TokenIcon, tokens))
 	}

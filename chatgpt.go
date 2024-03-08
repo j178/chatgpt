@@ -89,7 +89,7 @@ func newGoogleAI(kvs map[string]any) (*googleai.GoogleAI, error) {
 	return googleai.New(context.Background(), opts...)
 }
 
-func message(role schema.ChatMessageType, msg string) llms.MessageContent {
+func makeMessage(role schema.ChatMessageType, msg string) llms.MessageContent {
 	return llms.MessageContent{
 		Role:  role,
 		Parts: []llms.ContentPart{llms.TextPart(msg)},
@@ -103,8 +103,8 @@ func (c *ChatGPT) Ask(ctx context.Context, conf ConversationConfig, question str
 	}
 
 	messages := []llms.MessageContent{
-		message(schema.ChatMessageTypeSystem, c.conf.LookupPrompt(conf.Prompt)),
-		message(schema.ChatMessageTypeHuman, question),
+		makeMessage(schema.ChatMessageTypeSystem, c.conf.LookupPrompt(conf.Prompt)),
+		makeMessage(schema.ChatMessageTypeHuman, question),
 	}
 	opts := []llms.CallOption{
 		llms.WithModel(conf.Model),

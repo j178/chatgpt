@@ -8,6 +8,8 @@ import (
 
 	"github.com/j178/llms/llms"
 	"github.com/j178/llms/schema"
+
+	"github.com/j178/chatgpt/tokenizer"
 )
 
 type ConversationManager struct {
@@ -186,21 +188,21 @@ func (c *Conversation) UpdatePending(ans string, done bool) {
 func (c *Conversation) GetContextMessages() []llms.MessageContent {
 	messages := make([]llms.MessageContent, 0, 2*len(c.Context)+2)
 	messages = append(
-		messages, message(schema.ChatMessageTypeSystem, c.manager.conf.LookupPrompt(c.Config.Prompt)),
+		messages, makeMessage(schema.ChatMessageTypeSystem, c.manager.conf.LookupPrompt(c.Config.Prompt)),
 	)
 	for _, qna := range c.Context {
-		messages = append(messages, message(schema.ChatMessageTypeHuman, qna.Question))
-		messages = append(messages, message(schema.ChatMessageTypeAI, qna.Answer))
+		messages = append(messages, makeMessage(schema.ChatMessageTypeHuman, qna.Question))
+		messages = append(messages, makeMessage(schema.ChatMessageTypeAI, qna.Answer))
 	}
 	if c.Pending != nil {
-		messages = append(messages, message(schema.ChatMessageTypeHuman, c.Pending.Question))
+		messages = append(messages, makeMessage(schema.ChatMessageTypeHuman, c.Pending.Question))
 	}
 	return messages
 }
 
 func (c *Conversation) GetContextTokens() int {
 	if c.contextTokens == 0 {
-		// c.contextTokens = tokenizer.CountMessagesTokens(c.Config.Model, c.GetContextMessages())
+		c.contextTokens = tokenizer.CountMessagesTokens(c.GetContextMessages())
 	}
 	return c.contextTokens
 }
