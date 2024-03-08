@@ -10,7 +10,6 @@
         "temperature": 1,
         "max_tokens": 1024
       },
-      "forgotten": [],
       "context": [
         {
           "question": "Generate a piece of test text around 500 words, containing 5 more languages. Each language in a seperate line.",

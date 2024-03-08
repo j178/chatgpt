@@ -314,7 +314,12 @@ func migrateV1Config(data []byte) error {
 		v0.Conversation.Model = ""
 	}
 	v0.Conversation.Provider = defaultProviderName
-	v0.APIType = openai.APIType(strings.ToUpper(string(v0.APIType)))
+	if v0.APIType == openai.APITypeOpenAI {
+		v0.APIType = ""
+	} else {
+		v0.APIType = openai.APIType(strings.ToUpper(string(v0.APIType)))
+	}
+
 	conf.Version = currentConfigVersion
 	conf.Prompts = v0.Prompts
 	conf.DefaultConversation = v0.Conversation

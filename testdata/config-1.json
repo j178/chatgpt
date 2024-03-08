@@ -1,5 +1,7 @@
 {
+  "api_type": "AZURE",
   "api_key": "111111111111111111111111",
+  "api_version": "2023-09-01-preview",
   "endpoint": "https://xxxxx.openai.azure.com/",
   "prompts": {
     "default": "You are ChatGPT, a large language model trained by OpenAI. Answer as concisely as possible.",
