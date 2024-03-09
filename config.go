@@ -23,6 +23,7 @@ type ProviderType string
 
 const (
 	ProviderOpenAI      ProviderType = "openai"
+	ProviderAzureOpenAI ProviderType = "azure-openai"
 	ProviderGemini      ProviderType = "gemini"
 	ProviderClaude      ProviderType = "claude"
 	ProviderOllama      ProviderType = "ollama"
@@ -140,13 +141,14 @@ func (c *GlobalConfig) LookupPrompt(key string) string {
 }
 
 func ConversationsFile() string {
-	dir := ConfigDir()
-	return filepath.Join(dir, "conversations.json")
+	return filepath.Join(ConfigDir(), "conversations.json")
 }
 
 func ConfigFile() string {
-	dir := ConfigDir()
-	return filepath.Join(dir, "config.json")
+	if f := os.Getenv("CHATGPT_CONFIG_FILE"); f != "" {
+		return f
+	}
+	return filepath.Join(ConfigDir(), "config.json")
 }
 
 func ConfigDir() string {
@@ -242,7 +244,7 @@ func readConfig() (*GlobalConfig, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 	if version.Version == 0 || version.Version == 1 {
-		err = migrateV1Config(content)
+		err = migrateV0Config(content)
 		if err != nil {
 			return nil, fmt.Errorf("failed to migrate config file: %w", err)
 		}
@@ -295,7 +297,7 @@ func convertModelToAzureDeployment(model string, mapping map[string]string) stri
 	return regexp.MustCompile(`[.:]`).ReplaceAllString(model, "")
 }
 
-func migrateV1Config(data []byte) error {
+func migrateV0Config(data []byte) error {
 	conf := defaultConfig()
 	v0 := defaultV0Config()
 	err := json.Unmarshal(data, v0)
@@ -303,41 +305,43 @@ func migrateV1Config(data []byte) error {
 		return err
 	}
 
-	modelKey := "default_model"
-	model := v0.Conversation.Model
+	var provider ProviderConfig
 	azure := isAzure(v0.APIType)
 	if azure {
 		// For azure, in new version, instead of mapping model to deployment,
 		// we use explicit deployment parameter, and model is not used at all.
-		modelKey = "deployment"
-		model = convertModelToAzureDeployment(model, v0.ModelMapping)
+		deployment := convertModelToAzureDeployment(v0.Conversation.Model, v0.ModelMapping)
 		v0.Conversation.Model = ""
-	}
-	v0.Conversation.Provider = defaultProviderName
-	if v0.APIType == openai.APITypeOpenAI {
-		v0.APIType = ""
+		provider = ProviderConfig{
+			Type: ProviderAzureOpenAI,
+			Name: defaultProviderName,
+			KVs: map[string]any{
+				"base_url":    v0.Endpoint,
+				"api_key":     v0.APIKey,
+				"api_type":    openai.APIType(strings.ToUpper(string(v0.APIType))),
+				"api_version": v0.APIVersion,
+				"deployment":  deployment,
+			},
+		}
 	} else {
-		v0.APIType = openai.APIType(strings.ToUpper(string(v0.APIType)))
-	}
-
-	conf.Version = currentConfigVersion
-	conf.Prompts = v0.Prompts
-	conf.DefaultConversation = v0.Conversation
-	conf.KeyMap = v0.KeyMap
-	conf.Providers = []ProviderConfig{
-		{
+		provider = ProviderConfig{
 			Type: ProviderOpenAI,
 			Name: defaultProviderName,
 			KVs: map[string]any{
-				"base_url":     v0.Endpoint,
-				"api_key":      v0.APIKey,
-				"api_type":     v0.APIType,
-				"api_version":  v0.APIVersion,
-				"organization": v0.OrgID,
-				modelKey:       model,
+				"base_url":      v0.Endpoint,
+				"api_key":       v0.APIKey,
+				"organization":  v0.OrgID,
+				"default_model": v0.Conversation.Model,
 			},
-		},
+		}
 	}
+
+	v0.Conversation.Provider = provider.Name
+	conf.Version = currentConfigVersion
+	conf.Providers = []ProviderConfig{provider}
+	conf.Prompts = v0.Prompts
+	conf.DefaultConversation = v0.Conversation
+	conf.KeyMap = v0.KeyMap
 	err = writeConfig(conf)
 	if err != nil {
 		return err

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/j178/llms/llms"
 	"github.com/j178/llms/llms/anthropic"
@@ -32,6 +31,8 @@ func New(conf *GlobalConfig) (*ChatGPT, error) {
 		switch p.Type {
 		case ProviderOpenAI:
 			llm, err = newOpenAI(p.KVs)
+		case ProviderAzureOpenAI:
+			llm, err = newAzureOpenAI(p.KVs)
 		case ProviderGemini:
 			llm, err = newGemini(p.KVs)
 		case ProviderClaude:
@@ -70,15 +71,27 @@ func collectOpts[T any](kvs map[string]any, optFuncs map[string]func(string) T) 
 
 func newOpenAI(kvs map[string]any) (*openai.LLM, error) {
 	optFuncs := map[string]func(string) openai.Option{
-		"api_key":      openai.WithToken,
-		"base_url":     openai.WithBaseURL,
-		"organization": openai.WithOrganization,
-		"api_type": func(s string) openai.Option {
-			return openai.WithAPIType(openai.APIType(strings.ToUpper(s)))
-		},
-		"api_version":   openai.WithAPIVersion,
+		"api_key":       openai.WithToken,
+		"base_url":      openai.WithBaseURL,
+		"organization":  openai.WithOrganization,
 		"default_model": openai.WithModel,
-		"deployment":    openai.WithDeploymentName,
+	}
+	opts, err := collectOpts(kvs, optFuncs)
+	if err != nil {
+		return nil, err
+	}
+	return openai.New(opts...)
+}
+
+func newAzureOpenAI(kvs map[string]any) (*openai.LLM, error) {
+	optFuncs := map[string]func(string) openai.Option{
+		"api_key":  openai.WithToken,
+		"base_url": openai.WithBaseURL,
+		"api_type": func(s string) openai.Option {
+			return openai.WithAPIType(openai.APIType(s))
+		},
+		"api_version": openai.WithAPIVersion,
+		"deployment":  openai.WithDeploymentName,
 	}
 	opts, err := collectOpts(kvs, optFuncs)
 	if err != nil {
