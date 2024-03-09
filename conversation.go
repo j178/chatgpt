@@ -188,14 +188,14 @@ func (c *Conversation) UpdatePending(ans string, done bool) {
 func (c *Conversation) GetContextMessages() []llms.MessageContent {
 	messages := make([]llms.MessageContent, 0, 2*len(c.Context)+2)
 	messages = append(
-		messages, makeMessage(schema.ChatMessageTypeSystem, c.manager.conf.LookupPrompt(c.Config.Prompt)),
+		messages, llms.TextParts(schema.ChatMessageTypeSystem, c.manager.conf.LookupPrompt(c.Config.Prompt)),
 	)
 	for _, qna := range c.Context {
-		messages = append(messages, makeMessage(schema.ChatMessageTypeHuman, qna.Question))
-		messages = append(messages, makeMessage(schema.ChatMessageTypeAI, qna.Answer))
+		messages = append(messages, llms.TextParts(schema.ChatMessageTypeHuman, qna.Question))
+		messages = append(messages, llms.TextParts(schema.ChatMessageTypeAI, qna.Answer))
 	}
 	if c.Pending != nil {
-		messages = append(messages, makeMessage(schema.ChatMessageTypeHuman, c.Pending.Question))
+		messages = append(messages, llms.TextParts(schema.ChatMessageTypeHuman, c.Pending.Question))
 	}
 	return messages
 }

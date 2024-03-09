@@ -173,13 +173,6 @@ func newErnie(kvs map[string]any) (*ernie.LLM, error) {
 	return ernie.New(opts...)
 }
 
-func makeMessage(role schema.ChatMessageType, msg string) llms.MessageContent {
-	return llms.MessageContent{
-		Role:  role,
-		Parts: []llms.ContentPart{llms.TextPart(msg)},
-	}
-}
-
 func (c *ChatGPT) Ask(ctx context.Context, conf ConversationConfig, question string, out io.Writer) error {
 	llm := c.llms[conf.Provider]
 	if llm == nil {
@@ -187,8 +180,8 @@ func (c *ChatGPT) Ask(ctx context.Context, conf ConversationConfig, question str
 	}
 
 	messages := []llms.MessageContent{
-		makeMessage(schema.ChatMessageTypeSystem, c.conf.LookupPrompt(conf.Prompt)),
-		makeMessage(schema.ChatMessageTypeHuman, question),
+		llms.TextParts(schema.ChatMessageTypeSystem, c.conf.LookupPrompt(conf.Prompt)),
+		llms.TextParts(schema.ChatMessageTypeHuman, question),
 	}
 	opts := []llms.CallOption{
 		llms.WithModel(conf.Model),
