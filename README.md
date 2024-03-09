@@ -2,7 +2,17 @@
 
 [![GitHub downloads](https://img.shields.io/github/downloads/j178/chatgpt/total)](https://github.com/j178/chatgpt/releases)
 
-An interactive TUI for chatting with any GPT model, including OpenAI, Azure OpenAI, Google Gemini, Anthropic Claude, Cohere, Baidu Ernie, HuggingFace, and Ollama.
+An interactive TUI for chatting with any GPT model, supported LLMs:
+
+- OpenAI
+- [Azure OpenAI](https://azure.microsoft.com/en-us/products/ai-services/openai-service)
+- [Google Gemini](https://gemini.google.com/)
+- [Anthropic Claude](https://www.anthropic.com/api)
+- [Cohere](https://cohere.com/)
+- [Baidu Ernie](https://wenxin.baidu.com/ernie3)
+- [HuggingFace](https://huggingface.co/docs/api-inference/index)
+- [Groq](https://groq.com/)
+- [Ollama](https://ollama.com/)
 
 > [!Note]
 > More providers support (e.g. Claude, Gemini, Ollama) is under development and will be available soon. See [#88](https://github.com/j178/chatgpt/issues/88) for more details.
