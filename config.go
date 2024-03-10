@@ -32,6 +32,29 @@ const (
 	ProviderHuggingFace ProviderType = "huggingface"
 )
 
+func (t ProviderType) Name() string {
+	switch t {
+	case ProviderOpenAI:
+		return "OpenAI"
+	case ProviderAzureOpenAI:
+		return "Azure OpenAI"
+	case ProviderGemini:
+		return "Gemini"
+	case ProviderClaude:
+		return "Claude"
+	case ProviderOllama:
+		return "Ollama"
+	case ProviderCohere:
+		return "Cohere"
+	case ProviderErnie:
+		return "ERNIE"
+	case ProviderHuggingFace:
+		return "HuggingFace"
+	default:
+		return string(t)
+	}
+}
+
 type ProviderConfig struct {
 	Name string
 	Type ProviderType

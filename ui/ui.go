@@ -358,8 +358,9 @@ func (m Model) RenderConversation(maxWidth int) string {
 	}
 	renderer := m.renderer
 
-	renderYou := func(content string) {
+	renderChat := func(qna chatgpt.QnA) {
 		sb.WriteString(senderStyle.Render("You: "))
+		content := qna.Question
 		if chatgpt.ContainsCJK(content) {
 			content = wrap.String(content, maxWidth-5)
 		} else {
@@ -367,12 +368,12 @@ func (m Model) RenderConversation(maxWidth int) string {
 		}
 		content, _ = renderer.Render(content)
 		sb.WriteString(chatgpt.EnsureTrailingNewline(content))
-	}
-	renderBot := func(content string) {
+
+		content = qna.Answer
 		if content == "" {
 			return
 		}
-		sb.WriteString(botStyle.Render("ChatGPT: "))
+		sb.WriteString(botStyle.Render(fmt.Sprintf("%s - %s: ", qna.Provider, qna.Model)))
 		if chatgpt.ContainsCJK(content) {
 			content = wrap.String(content, maxWidth-5)
 		} else {
@@ -382,20 +383,17 @@ func (m Model) RenderConversation(maxWidth int) string {
 		sb.WriteString(chatgpt.EnsureTrailingNewline(content))
 	}
 	for _, m := range c.Forgotten {
-		renderYou(m.Question)
-		renderBot(m.Answer)
+		renderChat(m)
 	}
 	if len(c.Forgotten) > 0 {
 		sb.WriteString(lipgloss.NewStyle().PaddingLeft(5).Faint(true).Render("----- New Session -----"))
 		sb.WriteString("\n")
 	}
 	for _, q := range c.Context {
-		renderYou(q.Question)
-		renderBot(q.Answer)
+		renderChat(q)
 	}
 	if c.Pending != nil {
-		renderYou(c.Pending.Question)
-		renderBot(c.Pending.Answer)
+		renderChat(*c.Pending)
 	}
 	return sb.String()
 }
