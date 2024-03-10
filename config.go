@@ -61,6 +61,18 @@ type ProviderConfig struct {
 	KVs  map[string]any
 }
 
+func (c *ProviderConfig) Model() string {
+	model, err := getStr(c.KVs, "default_model")
+	if err == nil && model != "" {
+		return model
+	}
+	model, err = getStr(c.KVs, "deployment")
+	if err == nil && model != "" {
+		return model
+	}
+	return ""
+}
+
 func (c *ProviderConfig) MarshalJSON() ([]byte, error) {
 	kvs := orderedmap.New()
 	kvs.Set("type", string(c.Type))

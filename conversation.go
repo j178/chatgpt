@@ -153,8 +153,7 @@ func (m *ConversationManager) Next() *Conversation {
 type QnA struct {
 	Question string `json:"question"`
 	Answer   string `json:"answer"`
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
+	Bot      string `json:"bot"`
 }
 
 type Conversation struct {
@@ -174,11 +173,8 @@ func (c *Conversation) AddQuestion(q string) {
 			break
 		}
 	}
-	model := c.Config.Model
-	if model == "" {
-		model, _ = provider.KVs["default_model"].(string)
-	}
-	c.Pending = &QnA{Question: q, Provider: provider.Type.Name(), Model: model}
+	model := provider.Model()
+	c.Pending = &QnA{Question: q, Bot: model}
 	c.contextTokens = 0
 }
 
