@@ -4,6 +4,9 @@
 
 A CLI for ChatGPT, powered by GPT-3.5-turbo and GPT-4 models.
 
+> [!Note]
+> More providers support (e.g. Claude, Gemini, Ollama) is under development and will be available soon. See [#88](https://github.com/j178/chatgpt/issues/88) for more details.
+
 ![demo](https://user-images.githubusercontent.com/10510431/229564407-e4c0b6bf-adfb-40f0-a63c-840dafbc1291.gif)
 
 ## Usage
