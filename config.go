@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/j178/tiktoken-go"
 	"github.com/mitchellh/go-homedir"
 	"github.com/sashabaranov/go-openai"
 )
@@ -160,7 +159,8 @@ func InitConfig() (GlobalConfig, error) {
 	}
 
 	if conf.APIKey == "" {
-		return GlobalConfig{}, errors.New("Missing API key. Set it in `~/.config/chatgpt/config.json` or by setting the `OPENAI_API_KEY` environment variable. You can find or create your API key at https://platform.openai.com/account/api-keys.")
+		confDir := configDir()
+		return GlobalConfig{}, fmt.Errorf("Missing API key. Set it in `%s/config.json` or by setting the `OPENAI_API_KEY` environment variable. You can find or create your API key at https://platform.openai.com/account/api-keys.", confDir)
 	}
 
 	conf.APIType = openai.APIType(strings.ToUpper(string(conf.APIType)))
@@ -170,9 +170,5 @@ func InitConfig() (GlobalConfig, error) {
 		return GlobalConfig{}, fmt.Errorf("unknown API type: %s", conf.APIType)
 	}
 
-	_, err = tiktoken.ForModel(conf.Conversation.Model)
-	if err != nil {
-		return GlobalConfig{}, fmt.Errorf("invalid model %s", conf.Conversation.Model)
-	}
 	return conf, nil
 }

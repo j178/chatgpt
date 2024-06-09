@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/j178/tiktoken-go"
 	"github.com/sashabaranov/go-openai"
 
 	"github.com/j178/chatgpt/tokenizer"
@@ -66,11 +65,7 @@ func (m *ConversationManager) Load() error {
 	if err != nil {
 		return err
 	}
-	for i, c := range m.Conversations {
-		_, err = tiktoken.ForModel(c.Config.Model)
-		if err != nil {
-			return fmt.Errorf("invalid model %s in conversation %d", c.Config.Model, i+1)
-		}
+	for _, c := range m.Conversations {
 		c.manager = m
 	}
 	return nil
