@@ -242,7 +242,7 @@ func defaultConfig() *GlobalConfig {
 	}
 }
 
-func defaultV0Config() *LegacyV0Config {
+func defaultV1Config() *LegacyV0Config {
 	return &LegacyV0Config{
 		APIType:  openai.APITypeOpenAI,
 		Endpoint: "https://api.openai.com/v1",
@@ -279,7 +279,7 @@ func readConfig() (*GlobalConfig, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 	if version.Version == 0 || version.Version == 1 {
-		err = migrateV0Config(content)
+		err = migrateV1Config(path, content)
 		if err != nil {
 			return nil, fmt.Errorf("failed to migrate config file: %w", err)
 		}
@@ -332,10 +332,24 @@ func convertModelToAzureDeployment(model string, mapping map[string]string) stri
 	return regexp.MustCompile(`[.:]`).ReplaceAllString(model, "")
 }
 
-func migrateV0Config(data []byte) error {
+func backupLegacyConfig(path string, version string) error {
+	filename := filepath.Base(path)
+	ext := filepath.Ext(filename)
+	newFilename := filename[:len(filename)-len(ext)] + "-" + version + ext
+
+	newPath := filepath.Join(filepath.Dir(path), newFilename)
+	return os.Rename(path, newPath)
+}
+
+func migrateV1Config(path string, data []byte) error {
+	err := backupLegacyConfig(path, "v1")
+	if err != nil {
+		return err
+	}
+
 	conf := defaultConfig()
-	v0 := defaultV0Config()
-	err := json.Unmarshal(data, v0)
+	v0 := defaultV1Config()
+	err = json.Unmarshal(data, v0)
 	if err != nil {
 		return err
 	}
@@ -386,8 +400,7 @@ func migrateV0Config(data []byte) error {
 	conversations, err := NewConversationManager(conf, ConversationsFile())
 	if errors.Is(err, os.ErrNotExist) {
 		err = nil
-	}
-	if err != nil {
+	} else if err != nil {
 		return err
 	}
 	for _, conv := range conversations.Conversations {

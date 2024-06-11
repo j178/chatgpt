@@ -19,6 +19,8 @@ type ConversationManager struct {
 	Idx           int             `json:"last_idx"`
 }
 
+// TODO conversation save in SQLite
+
 func NewConversationManager(conf *GlobalConfig, historyFile string) (*ConversationManager, error) {
 	h := &ConversationManager{
 		file: historyFile,
