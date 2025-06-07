@@ -309,3 +309,5 @@ Find more details about Azure OpenAI service here: https://learn.microsoft.com/e
 ## License
 
 MIT
+
+[![Powered by DartNode](https://dartnode.com/branding/DN-Open-Source-sm.png)](https://dartnode.com "Powered by DartNode - Free VPS for Open Source")
